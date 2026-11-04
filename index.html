@@ -22,9 +22,12 @@
 
    Seções:
    - textos ....... frases e rótulos fixos da tela.
-   - etapas ....... os degraus do multiplicador (1x até 20x). Cada etapa tem um
-                    desfecho "ganhou" e um "perdeu", com chance, título e mensagem.
-   - intensidades . a partir de qual multiplicador cada faixa visual começa.
+   - giros ........ onde a rodada pode parar (quebra, tela cheia ou Curinga total) em cada um
+                    dos 20 giros, com a chance de cada parada.
+   - formacoes .... o que vale no tabuleiro (linhas e formas), os pesos, os fatores e o teto.
+   - faixas ....... título e mensagens de acordo com o multiplicador final (mais a tela cheia
+                    e a Curinga total).
+   - intensidades . a partir de qual multiplicador acumulado cada faixa visual começa.
    - simbolos ..... os 15 símbolos do tabuleiro (um deles é a Carta LA).
    - tempos ....... velocidade geral e durações-base das animações.
    - som .......... som ligado/desligado e volume.
@@ -51,206 +54,237 @@ window.CONFIG = {
     // Aviso que aparece no lugar do jogo quando o celular está deitado. Ao voltar o celular
     // para em pé, o jogo continua de onde estava.
     avisoGirar: 'Gire o celular para jogar',
-    // Rótulo da etapa lido pelos leitores de tela (ex.: "Etapa 3").
-    rotuloEtapa: 'Etapa',
-    // Anunciador de fliperama durante a rodada: a cada etapa aparece "ROUND 3 · 3x".
+    // Rótulo do giro lido pelos leitores de tela (ex.: "Giro 3").
+    rotuloGiro: 'Giro',
+    // Anunciador de fliperama durante a rodada: a cada giro aparece "ROUND 3 · x12".
     rotuloRound: 'ROUND',
     // Rótulo da barra de ganho.
     rotuloGanho: 'Ganho',
     // Pílulas do placar decorativo: 2 ou 3 textos curtos (até ~15 letras cada). É só piada:
     // nada de dinheiro, valores ou palavras de aposta.
     placar: ['Saldo: ∞ amor', 'Torcida: 100%'],
-    // Como o tipo do resultado aparece na tela.
-    tipoGanhou: 'Ganhou!',
-    tipoPerdeu: 'Perdeu!',
-    // Palavra da derrota (anunciador, no fim da rodada perdida) e da vitória na última etapa.
+    // Como o tipo da Parada aparece na tela e no anúncio dos leitores de tela (no lugar de "Ganhou!" e "Perdeu!").
+    tipoQuebra: 'Combo quebrado',
+    tipoTelaCheia: 'Tela cheia!',
+    tipoSuprema: 'Curinga total!',
+    // Como os leitores de tela leem o "x∞" desenhado na tela ("x infinito").
+    infinitoLeitor: 'infinito',
+    // Palavras do anunciador no fim da rodada: a quebra do combo, a tela cheia e a Curinga total.
     palavraDerrota: 'K.O.',
+    palavraTelaCheia: 'TELA CHEIA!',
     palavraVitoriaMaxima: 'PERFECT!',
+    // Nomes das formações no anunciador e nos selos do fator ("LINHA x2", "CRUZ ESPECIAL x6", "CORINGA EM CRUZ x9").
+    // O jogo junta o nome com o fator ("x2"). Ícone especial acrescenta o sufixo; forma de Coringa leva o prefixo.
+    nomeLinha: 'LINHA',
+    nomeLinhaEspecial: 'LINHA ESPECIAL',
+    nomeLinhaMista: 'LINHA MISTA',
+    nomeLinhaCoringa: 'CORINGA',
+    nomeFormaL: 'L',
+    nomeFormaT: 'T',
+    nomeFormaCruz: 'CRUZ',
+    sufixoEspecial: 'ESPECIAL',
+    prefixoFormaCoringa: 'CORINGA EM',
+    // Selo que aparece ao lado do multiplicador quando ele bate o teto (formacoes.teto).
+    seloTeto: 'MAX',
   },
 
-  /* ---------- ETAPAS (1x até 20x) ----------
-     A rodada passa pelas etapas de cima para baixo até a etapa final sorteada.
-     - Remover uma entrada remove a etapa do jogo. Ex.: deixando só as 10 primeiras,
-       o jogo nunca passa de 10x.
-     - Acrescentar uma entrada no fim cria uma etapa nova. Ex.: com 25 entradas, o jogo
-       pode chegar até a etapa 25.
+  /* ---------- GIROS (a rodada inteira é sorteada no toque) ----------
+     A rodada é uma sequência de GIROS (até 20). Cada giro com combinação multiplica o Multiplicador
+     acumulado e faz os rolos girarem de novo sozinhos; a rodada só termina numa de três PARADAS:
+       quebra ....... um giro sem nenhuma combinação (o combo quebrou); vale o acumulado até o giro anterior;
+       telaCheia .... um re-spin enche as 9 casas com o mesmo ícone (comum ou especial); vale o acumulado;
+       suprema ...... um re-spin enche as 9 casas com a Carta LA (Curinga total); o multiplicador vira x∞.
+     Cada entrada da lista é um giro (a 1ª é o Giro Inicial, disparado pelo toque) e traz a chance de a
+     rodada PARAR naquele giro de cada jeito. No giro 1 só existe quebra (telaCheia e suprema ficam em 0):
+     as duas vitórias só acontecem em re-spin.
+     - Remover entradas do fim reduz o máximo de giros. Ex.: com 10 entradas, a rodada nunca passa do giro 10.
+     - Acrescentar entradas no fim cria giros novos.
 
-     Cada etapa tem:
-     - multiplicador: o número mostrado na tela (ex.: 5 aparece como "5x");
-     - intensidade (opcional): 'morno', 'quente', 'pegando-fogo', 'lendario' ou 'jackpot'.
-       Se ficar de fora, vem da tabela "intensidades" mais abaixo; se estiver aqui, ela manda
-       (sobrescreve a faixa só desta etapa);
-     - ganhou e perdeu: cada um com
-         chance   → a chance desse desfecho (veja abaixo);
-         titulo   → título curto do resultado;
-         mensagem → um texto, ou uma lista de textos ['a', 'b', 'c'] (aí um deles é sorteado).
-
-     COMO ESCREVER TÍTULOS E MENSAGENS
-     - Título com até 28 caracteres e mensagem com até 140, para caber em qualquer celular
-       sem corte. Se passar disso, o jogo mostra mesmo assim e avisa só no console.
-     - Lista de mensagens: a cada rodada que termina nesse resultado, uma é sorteada, sem
-       repetir a última que apareceu para ele. Assim a fila não vê a mesma piada duas vezes
-       seguidas. Os resultados mais comuns (perdeu em 1x, 2x e 3x) já vêm com 3 variações.
-     - Texto vazio ou lista vazia não quebra nada: o jogo usa uma mensagem segura padrão
-       e avisa só no console.
-     - É só zoeira: nenhuma mensagem promete prêmio, pede outra contribuição ou fala de
-       dinheiro de verdade.
-     - A tabela de revisão das 40 mensagens fica em docs/mensagens/tabela-revisao.md
-       (fora do jogo publicado).
-
-     COMO LER AS CHANCES
-     - Leia cada chance como porcentagem das rodadas: "perdeu em 1x" com chance 25 quer
-       dizer que 25% das rodadas terminam com derrota em 1x. As 40 chances padrão somam 100.
-     - Se a soma não der 100, o jogo normaliza sozinho: cada chance vale proporcionalmente
-       ao total. Ex.: se tudo somar 250, uma chance 25 vale 25 ÷ 250 = 10% das rodadas.
-       Ou seja, um erro de conta não quebra nada; só muda as proporções.
-     - Chance 0 = esse desfecho nunca sai.
-     - Chance negativa, vazia ou que não seja número conta como 0 (o aviso aparece só no
-       console do navegador). Se todas ficarem 0, todos os desfechos passam a ter a mesma chance.
+     COMO LER AS CHANCES (iguais às de antes)
+     - Cada chance é uma porcentagem das rodadas: "quebra: 16.18" no giro 1 quer dizer que 16,18% das rodadas
+       terminam com a quebra no giro 1. As 60 chances padrão somam 100.
+     - Se a soma não der 100, o jogo normaliza sozinho (cada chance vale chance ÷ total). Chance 0 = nunca sai.
+       Chance negativa, vazia ou que não seja número conta como 0 (aviso só no console). Se tudo ficar 0,
+       todas as paradas passam a ter a mesma chance.
      - Use ponto nos decimais: 0.45 (e não 0,45).
 
-     CHANCES PADRÃO (somam 100)
-     - Vitórias somam 15: cerca de 15% das rodadas, cada vez mais raras nas etapas altas
-       (de 3.5 em 1x até 0.2 em 20x).
-     - Derrotas somam 85, concentradas no começo:
-         1x a 3x ... 25 + 15 + 10 = 50 (metade das rodadas termina em derrota até 3x);
-         4x a 10x .. somam 28, decrescendo;
-         11x a 20x . somam 7, decrescendo. */
-  etapas: [
-    { multiplicador: 1,
-      ganhou: { chance: 3.5,  titulo: 'Soltou a carta!',
-                mensagem: 'Logo no primeiro round o tigrinho abriu a mão. Rápido e sem enrolação, igual ao sim dos noivos!' },
-      perdeu: { chance: 25,   titulo: 'K.O. no primeiro round',
-                mensagem: [
-                  'O tigrinho guardou a carta no bolso do terno e fingiu que nem viu. Pelo menos a festa continua linda!',
-                  'Round 1, FIGHT... e K.O.! O tigrinho nem suou. Vai pra pista, que a dança perdoa tudo.',
-                  'O texugo nem tinha acordado e o tigrinho já tinha guardado a carta. Mas o sorriso dos noivos é seu.',
-                ] } },
-    { multiplicador: 2,
-      ganhou: { chance: 2.4,  titulo: 'Combo duplo',
-                mensagem: 'Dois rounds e a Carta LA encheu o tabuleiro. O cachorro abanou o rabo de aprovação!' },
-      perdeu: { chance: 15,   titulo: 'Caiu no segundo round',
-                mensagem: [
-                  'Dois rounds e o tigrinho mudou de ideia: escondeu a carta debaixo do boné e saiu assobiando.',
-                  'Começou bem, mas o cachorro sentou em cima da carta. E ninguém discute com cachorro sentado.',
-                  'K.O. no segundo round! O tigrinho mandou dizer que adorou seu estilo, só não soltou a carta.',
-                ] } },
-    { multiplicador: 3,
-      ganhou: { chance: 1.7,  titulo: 'Trinca da sorte',
-                mensagem: 'Três rounds e o tigrinho cedeu. Ergam os copos de Aperol: tim-tim pra você e pros noivos!' },
-      perdeu: { chance: 10,   titulo: 'Três rounds e um K.O.',
-                mensagem: [
-                  'O tigrinho até pensou em soltar a carta, mas lembrou do Aperol dele no balcão e foi embora.',
-                  'Três rounds de pura fé. O tigrinho segurou a carta com as duas patas e ainda deu tchauzinho.',
-                  'Quase esquentou! No terceiro round o tigrinho guardou a carta no paletó e pediu um whisky.',
-                ] } },
-    { multiplicador: 4,
-      ganhou: { chance: 1.3,  titulo: 'O tigrinho foi com sua cara',
-                mensagem: 'Quatro rounds de charme e a carta saiu. O texugo tirou o boné em sinal de respeito.' },
-      perdeu: { chance: 6.5,  titulo: 'Bateu na trave',
-                mensagem: 'Quatro rounds e a carta quase escorregou da pata do tigrinho. Mas ficou presa no cadarço do tênis.' } },
-    { multiplicador: 5,
-      ganhou: { chance: 1,    titulo: 'Mão quente',
-                mensagem: 'Cinco rounds e a Carta LA tomou conta do tabuleiro. Sua mão está mais quente que a pista de dança!' },
-      perdeu: { chance: 5.5,  titulo: 'K.O. de cinema',
-                mensagem: 'Cinco rounds de emoção e uma queda digna de filme. Os noivos aplaudiram a luta mesmo assim.' } },
-    { multiplicador: 6,
-      ganhou: { chance: 0.8,  titulo: 'Tigrinho domado',
-                mensagem: 'Seis rounds e o tigrinho já ronrona pra você. Até o cachorro ficou com ciúme.' },
-      perdeu: { chance: 4.5,  titulo: 'Faltou um golpe',
-                mensagem: 'Seis rounds e o tigrinho defendeu tudo. A carta ficou com ele, mas o cachorro virou seu fã.' } },
-    { multiplicador: 7,
-      ganhou: { chance: 0.6,  titulo: 'Sete é conta de mentiroso',
-                mensagem: 'Mas é verdade: sete rounds e o tigrinho soltou a carta. Pode ir pra pista dançar de tênis e tudo!' },
-      perdeu: { chance: 4,    titulo: 'Sete rounds de drama',
-                mensagem: 'Foi lindo até o sétimo round. O tigrinho segurou a carta e o texugo bufou de raiva por você.' } },
-    { multiplicador: 8,
-      ganhou: { chance: 0.5,  titulo: 'Golpe especial',
-                mensagem: 'Oito rounds e você mandou o golpe especial: Carta LA no tabuleiro inteiro. PLAYER 1 venceu!' },
-      perdeu: { chance: 3.5,  titulo: 'Esquentou, mas não ferveu',
-                mensagem: 'Oito rounds! O tabuleiro já estava quase dourado quando o tigrinho fechou a pata. Que maldade.' } },
-    { multiplicador: 9,
-      ganhou: { chance: 0.45, titulo: 'Nove rounds de nervo',
-                mensagem: 'O tigrinho cansou de segurar e soltou a carta no nono round. O texugo levantou pra aplaudir!' },
-      perdeu: { chance: 2.2,  titulo: 'Caiu com classe',
-                mensagem: 'Nove rounds de luta e uma queda elegante. O boné até voou, mas a carta não saiu do lugar.' } },
-    { multiplicador: 10,
-      ganhou: { chance: 0.4,  titulo: 'Dez rounds, zero medo',
-                mensagem: 'A Carta LA encheu o tabuleiro e até o HUNCH brilhou mais forte. Os noivos querem você no time deles!' },
-      perdeu: { chance: 1.8,  titulo: 'Dez rounds e um suspiro',
-                mensagem: 'A plateia já gritava quando o tigrinho guardou a carta no último segundo. Coisa de vilão de novela.' } },
-    { multiplicador: 11,
-      ganhou: { chance: 0.3,  titulo: 'Tabuleiro em chamas',
-                mensagem: 'Onze rounds e o tabuleiro pegando fogo. O tigrinho soltou a carta e ainda pediu uma foto com você.' },
-      perdeu: { chance: 1.3,  titulo: 'Chegou tão perto...',
-                mensagem: 'Onze rounds! Chegou tão perto que o texugo até levantou da cadeira. Só faltou a carta cair.' } },
-    { multiplicador: 12,
-      ganhou: { chance: 0.3,  titulo: 'Uma dúzia de coragem',
-                mensagem: 'Doze rounds! A carta veio, o boné voou longe e o cachorro uivou de alegria.' },
-      perdeu: { chance: 1.1,  titulo: 'O tigrinho suou frio',
-                mensagem: 'Doze rounds com o tigrinho suando frio. No fim ele segurou a carta pela pontinha. Que luta!' } },
-    { multiplicador: 13,
-      ganhou: { chance: 0.25, titulo: '13 não dá azar',
-                mensagem: 'Treze rounds e, quem diria, o 13 virou número da sorte. O tigrinho se rendeu a você!' },
-      perdeu: { chance: 0.95, titulo: 'Agora o 13 deu azar',
-                mensagem: 'Treze rounds e o 13 resolveu fazer jus à fama. O tigrinho guardou a carta rindo baixinho.' } },
-    { multiplicador: 14,
-      ganhou: { chance: 0.25, titulo: 'Fôlego de maratonista',
-                mensagem: 'Catorze rounds e você nem suou. O tênis pediu arrego, mas a Carta LA encheu o tabuleiro!' },
-      perdeu: { chance: 0.8,  titulo: 'Quase, quase, quase',
-                mensagem: 'Catorze rounds! O whisky já estava no gelo pra comemorar quando veio o K.O. Fica a lenda.' } },
-    { multiplicador: 15,
-      ganhou: { chance: 0.25, titulo: 'Vitória lendária',
-                mensagem: 'Quinze rounds! A plateia levantou, o texugo chorou de emoção e o tigrinho soltou a carta.' },
-      perdeu: { chance: 0.7,  titulo: 'Derrota lendária',
-                mensagem: 'Quinze rounds e ninguém vai esquecer essa luta. Vai ter história pra contar a festa inteira.' } },
-    { multiplicador: 16,
-      ganhou: { chance: 0.2,  titulo: 'Modo lenda ativado',
-                mensagem: 'Dezesseis rounds sem um K.O. sequer. O tigrinho fez reverência e entregou a carta de bandeja.' },
-      perdeu: { chance: 0.6,  titulo: 'Final de roer as unhas',
-                mensagem: 'Dezesseis rounds e um K.O. no detalhe. Até os noivos pararam tudo pra assistir essa luta.' } },
-    { multiplicador: 17,
-      ganhou: { chance: 0.2,  titulo: 'Imbatível',
-                mensagem: 'Dezessete rounds! Ergam o Aperol e o whisky: tem lenda jogando o tigrinho do L&A hoje.' },
-      perdeu: { chance: 0.5,  titulo: 'Por um fio de bigode',
-                mensagem: 'Dezessete rounds! Faltou um fio do bigode do tigrinho pra carta sair. O cachorro está inconsolável.' } },
-    { multiplicador: 18,
-      ganhou: { chance: 0.2,  titulo: 'O tigrinho jogou a toalha',
-                mensagem: 'Dezoito rounds e o tigrinho desistiu de lutar: a Carta LA tomou o tabuleiro. A pista de dança é toda sua!' },
-      perdeu: { chance: 0.4,  titulo: 'Até o tigrinho ficou triste',
-                mensagem: 'Dezoito rounds e K.O. no finzinho. O tigrinho ficou com tanta pena que quase devolveu a carta.' } },
-    { multiplicador: 19,
-      ganhou: { chance: 0.2,  titulo: 'Quase impossível',
-                mensagem: 'Dezenove rounds! A um passo do topo, o tigrinho soltou a carta. Os noivos estão de queixo caído.' },
-      perdeu: { chance: 0.35, titulo: 'Na beira do topo',
-                mensagem: 'Dezenove rounds! Faltava um degrau quando o tigrinho segurou a carta. O salão inteiro gritou NÃOOO.' } },
-    { multiplicador: 20,
-      ganhou: { chance: 0.2,  titulo: 'Zerou o tigrinho!',
-                mensagem: 'Vinte rounds, tabuleiro dourado e o tigrinho de joelhos. Você zerou o jogo do casamento! L&A te aplaudem de pé.' },
-      perdeu: { chance: 0.3,  titulo: 'K.O. na grande final',
-                mensagem: 'Vinte rounds e K.O. na última luta. A derrota mais épica da história do L&A. Respeita, tigrinho!' } },
+     CHANCES PADRÃO: 55% de quebras, 35% de telas cheias e 10% de Curinga total. A forma é a curva de
+     sempre: as quebras ficam concentradas nos primeiros giros (cerca de 55% das rodadas terminam até o
+     3º giro) e as vitórias ficam cada vez mais raras nos giros altos. */
+  giros: [
+    { quebra: 16.1765, telaCheia: 0,       suprema: 0      }, // giro 1
+    { quebra: 9.7059,  telaCheia: 13.7667, suprema: 3.9333 }, // giro 2
+    { quebra: 6.4706,  telaCheia: 3.9667,  suprema: 1.1333 }, // giro 3
+    { quebra: 4.2059,  telaCheia: 3.0333,  suprema: 0.8667 }, // giro 4
+    { quebra: 3.5588,  telaCheia: 2.3333,  suprema: 0.6667 }, // giro 5
+    { quebra: 2.9118,  telaCheia: 1.8667,  suprema: 0.5333 }, // giro 6
+    { quebra: 2.5882,  telaCheia: 1.4,     suprema: 0.4    }, // giro 7
+    { quebra: 2.2647,  telaCheia: 1.1667,  suprema: 0.3333 }, // giro 8
+    { quebra: 1.4235,  telaCheia: 1.05,    suprema: 0.3    }, // giro 9
+    { quebra: 1.1647,  telaCheia: 0.9333,  suprema: 0.2667 }, // giro 10
+    { quebra: 0.8412,  telaCheia: 0.7,     suprema: 0.2    }, // giro 11
+    { quebra: 0.7118,  telaCheia: 0.7,     suprema: 0.2    }, // giro 12
+    { quebra: 0.6147,  telaCheia: 0.5833,  suprema: 0.1667 }, // giro 13
+    { quebra: 0.5176,  telaCheia: 0.5833,  suprema: 0.1667 }, // giro 14
+    { quebra: 0.4529,  telaCheia: 0.5833,  suprema: 0.1667 }, // giro 15
+    { quebra: 0.3882,  telaCheia: 0.4667,  suprema: 0.1333 }, // giro 16
+    { quebra: 0.3235,  telaCheia: 0.4667,  suprema: 0.1333 }, // giro 17
+    { quebra: 0.2588,  telaCheia: 0.4667,  suprema: 0.1333 }, // giro 18
+    { quebra: 0.2265,  telaCheia: 0.4667,  suprema: 0.1333 }, // giro 19
+    { quebra: 0.1941,  telaCheia: 0.4667,  suprema: 0.1333 }, // giro 20
   ],
 
+  /* ---------- FORMAÇÕES (o que vale no tabuleiro e quanto multiplica) ----------
+     Linhas de pagamento: as 3 horizontais e as 2 diagonais (coluna sozinha não vale).
+     Formas: 9 desenhos de 5 casas (a cruz, 4 T e 4 L). Só vale uma Forma por giro, a de maior fator, e
+     ela absorve a linha que está dentro dela. O Coringa (Carta LA) só substitui em linhas, nunca em formas.
+
+     - peso: a chance relativa de cada tipo aparecer num giro (valem as proporções, não precisa somar 100).
+         linha ........... 3 ícones iguais em linha;
+         linhaMista ...... o mesmo ícone com 1 ou 2 Coringas;
+         forma ........... 5 ícones iguais em L, T ou cruz;
+         linhaCoringa .... 3 Coringas em linha;
+         formaCoringa .... 5 Coringas em L, T ou cruz.
+     - comum / especial: o fator (quanto multiplica) com ícone comum e com ícone especial (os símbolos com
+       "especial: true" lá embaixo). Se "especial" for apagado, vale o DOBRO do comum.
+     - fator: a linhaMista, a linhaCoringa e a formaCoringa têm um fator só.
+     - giroDuplo: chance (%) de um giro ter 2 formações em vez de 1. Quando há 2, os fatores se multiplicam.
+     - teto: o multiplicador acumulado trava aqui (aparece o selo MAX) e os giros continuam normalmente.
+     O ícone de cada formação é sorteado entre os 14 que não são a Carta, todos com a mesma chance. */
+  formacoes: {
+    linha:         { peso: 45, comum: 2, especial: 4 },
+    linhaMista:    { peso: 25, fator: 5 },
+    forma:         { peso: 15, comum: 3, especial: 6 },
+    linhaCoringa:  { peso: 10, fator: 6 },
+    formaCoringa:  { peso: 5,  fator: 9 },
+    giroDuplo: 25,
+    teto: 999999,
+  },
+
+  /* ---------- FAIXAS (a mensagem de acordo com o multiplicador final) ----------
+     Quando a rodada para, o jogo olha o multiplicador final e escolhe título e mensagem da faixa dele.
+     - id: não mude (o jogo usa quebraImediata, inicial, intermediaria, avancada e lendaria).
+     - de / ate: os limites do multiplicador final (a última faixa não tem "ate": vai até o teto).
+     - titulo: título curto (até 28 caracteres). mensagem: um texto ou uma lista ['a', 'b', 'c']; com lista,
+       um deles é sorteado a cada rodada, sem repetir o último que apareceu NAQUELA faixa (até 140 caracteres).
+     O mesmo banco vale para a quebra e para a tela cheia; muda só o título (veja "telaCheia" abaixo).
+     É só zoeira: nenhuma mensagem promete prêmio, pede outra contribuição ou fala de dinheiro de verdade.
+     As frases do padrinho (3 por faixa e 3 na Suprema) estão aqui literais, sempre as primeiras de cada lista: não
+     reescreva (a fonte delas é docs/mensagens/frases-do-padrinho.md e o checador compara caractere a caractere).
+     As demais são as mensagens antigas adaptadas: sem "N rounds", sem multiplicador fixo e com o lulu no lugar do cachorro.
+     Como a tela cheia usa o mesmo banco da quebra, as das faixas inicial a lendária não dizem se a carta saiu ou ficou.
+     Para revisar tudo de uma vez: node ferramentas/tabela-mensagens.js (gera docs/mensagens/tabela-revisao.md). */
+  faixas: [
+    { id: 'quebraImediata', de: 1, ate: 1, titulo: 'K.O. no primeiro giro',
+      mensagem: [
+        'O tigrinho guardou a carta no bolso do terno e fingiu que nem viu. Pelo menos a festa continua linda!',
+        'Giro 1, FIGHT... e K.O.! O tigrinho nem suou. Vai pra pista, que a dança perdoa tudo.',
+        'O texugo nem tinha acordado e o tigrinho já tinha guardado a carta. Mas o sorriso dos noivos é seu.',
+      ] },
+    { id: 'inicial', de: 2, ate: 6, titulo: 'Início tímido',
+      mensagem: [
+        'Início tímido! Pelo menos pagou o guaraná.',
+        'Um passo de cada vez. O motor está aquecendo!',
+        'Multiplicador ok, mas sabemos que você consegue mais.',
+        'O tigrinho olhou o combo, coçou o bigode e foi assobiando pro balcão. Quem entende desse bicho?',
+        'Começou bem, e o lulu sentou pra assistir. E ninguém discute com lulu sentado.',
+        'O tigrinho mandou dizer que adorou seu estilo e que esse combo ainda vai render história.',
+        'O tigrinho até pensou em ficar, mas lembrou do Aperol dele no balcão e foi buscar.',
+        'Pura fé: o tigrinho segurou a carta com as duas patas e ainda deu tchauzinho pra você.',
+        'Quase esquentou! O tigrinho ajeitou o paletó e pediu um whisky pra esperar a coisa pegar fogo.',
+      ] },
+    { id: 'intermediaria', de: 7, ate: 100, titulo: 'Bola de neve crescendo',
+      mensagem: [
+        'Agora sim! A bola de neve começou a crescer!',
+        'Respeita o estrategista! Multiplicador de respeito.',
+        'Os amigos na mesa já estão começando a secar a sua sorte!',
+        'A carta quase escorregou da pata do tigrinho e ficou presa no cadarço do tênis. Que bola de neve é essa?',
+        'Combo digno de filme. Os noivos aplaudiram a luta de pé!',
+        'O tigrinho suou pra defender tudo, e o lulu virou seu fã de carteirinha.',
+        'Foi lindo de ver. O tigrinho segurou a carta com unhas e dentes e o texugo bufou de emoção por você.',
+        'O tabuleiro já estava quase dourado quando o tigrinho fechou a pata. Esquentou, mas ainda não ferveu!',
+      ] },
+    { id: 'avancada', de: 101, ate: 25000, titulo: 'Sequência absurda',
+      mensagem: [
+        'Que sequência absurda! O tabuleiro quase quebrou!',
+        'Alerta de GG! Você buildou o multiplicador perfeito.',
+        'Segura o homem/mulher! Sorte calibrada com sucesso.',
+        'Que combo elegante: o boné até voou e a carta nem se mexeu do lugar.',
+        'A plateia já gritava e o tigrinho segurou a carta no último segundo. Coisa de vilão de novela.',
+        'Chegou tão perto que o texugo até levantou da cadeira. Só faltou a carta cair.',
+        'O tigrinho suou frio e, no fim, segurou a carta pela pontinha. Que luta!',
+        'Superstição é coisa séria: o tigrinho viu esse combo, riu baixinho e o salão inteiro ficou arrepiado.',
+        'O whisky já estava no gelo pra comemorar o combo. Fica a lenda do tigrinho que suou frio.',
+      ] },
+    { id: 'lendaria', de: 25001, titulo: 'Combo lendário',
+      mensagem: [
+        'Histórico! O maior combo que essa mesa já viu!',
+        'Matemática pura ou pura feitiçaria? Multiplicador lendário!',
+        'Você simplesmente zerou a rodada. Alguém pare esse jogador!',
+        'Ninguém vai esquecer essa luta. Vai ter história pra contar a festa inteira.',
+        'Até os noivos pararam tudo pra assistir esse combo. Fica a lenda.',
+        'Faltou um fio do bigode do tigrinho pra carta sair. O lulu está emocionado demais pra latir.',
+        'Tanta glória que o tigrinho ficou com pena e quase devolveu a carta. Quase!',
+        'Faltava um degrau pro topo e o salão inteiro gritou. Os noivos estão de queixo caído.',
+        'A luta mais épica da história do L&A. Respeita, tigrinho!',
+      ] },
+  ],
+
+  /* ---------- TELA CHEIA ----------
+     Quando as 9 casas ficam com o mesmo ícone. O título leva o nome do ícone: {simbolo} vira "Aperol",
+     "Texugo"… A mensagem vem da faixa do multiplicador final (veja "faixas"). */
+  telaCheia: { titulo: 'Tela cheia de {simbolo}!' },
+
+  /* ---------- SUPREMA (Curinga total: as 9 casas com a Carta LA) ----------
+     Título e mensagens próprias. O multiplicador vira "x∞". */
+  suprema: {
+    titulo: 'Curinga total!',
+    mensagem: [
+      'IMPOSSÍVEL! O CURINGA TOTAL FOI ATIVADO! Multiplicador Infinito desbloqueado!',
+      'A LENDA É REAL! Tela cheia de LA! Você quebrou a banca recreativa!',
+      'Vitória Absoluta! Curvemo-nos perante o Deus do Curinga!',
+      'Logo de cara o tigrinho abriu a mão. Rápido e sem enrolação, igual ao sim dos noivos!',
+      'A Carta LA encheu o tabuleiro e o lulu abanou o rabo de aprovação!',
+      'O tigrinho cedeu. Ergam os copos de Aperol: tim-tim pra você e pros noivos!',
+      'Charme puro e a carta saiu. O texugo tirou o boné em sinal de respeito.',
+      'A Carta LA tomou conta do tabuleiro. Sua mão está mais quente que a pista de dança!',
+      'O tigrinho já ronrona pra você. Até o lulu ficou com ciúme.',
+      'Parece mentira, mas é verdade: o tigrinho soltou a carta. Pode ir pra pista dançar de tênis e tudo!',
+      'Você mandou o golpe especial: Carta LA no tabuleiro inteiro. PLAYER 1 venceu!',
+      'O tigrinho cansou de segurar e soltou a carta. O texugo levantou pra aplaudir!',
+      'A Carta LA encheu o tabuleiro e até o HUNCH brilhou mais forte. Os noivos querem você no time deles!',
+      'O tabuleiro pegando fogo! O tigrinho soltou a carta e ainda pediu uma foto com você.',
+      'A carta veio, o boné voou longe e o lulu uivou de alegria!',
+      'Dizem que 13 dá azar, mas hoje virou número da sorte. O tigrinho se rendeu a você!',
+      'Você nem suou. O tênis pediu arrego, mas a Carta LA encheu o tabuleiro!',
+      'A plateia levantou, o texugo chorou de emoção e o tigrinho soltou a carta!',
+      'Sem um K.O. sequer. O tigrinho fez reverência e entregou a carta de bandeja.',
+      'Ergam o Aperol e o whisky: tem lenda jogando o tigrinho do L&A hoje!',
+      'O tigrinho desistiu de lutar: a Carta LA tomou o tabuleiro. A pista de dança é toda sua!',
+      'A um passo do topo, o tigrinho soltou a carta. Os noivos estão de queixo caído!',
+      'Tabuleiro dourado e o tigrinho de joelhos. Você zerou o jogo do casamento! L&A te aplaudem de pé.',
+    ],
+  },
+
   /* ---------- INTENSIDADES ----------
-     Faixa visual de cada etapa: quanto mais alta, mais exageradas as animações.
-       morno ........ (1x a 3x)   brilho e faíscas leves;
-       quente ....... (4x a 7x)   giro mais rápido, faíscas, moldura rosada pulsando, Logo pulando;
-       pegando-fogo . (8x a 12x)  tela tremendo, partículas de fogo, fundo esquentando, "batimento";
-       lendario ..... (13x a 19x) câmera lenta na parada, raios, chuva de moedas, zoom;
-       jackpot ...... (20x)       tudo isso e, se ganhar, o monograma LA em tela cheia, fogos e aguada Lírio/Pêssego.
+     Quanto mais alto o Multiplicador acumulado, mais exageradas as animações:
+       morno ........ brilho e faíscas leves;
+       quente ....... giro mais rápido, faíscas, moldura rosada pulsando, Logo pulando;
+       pegando-fogo . tela tremendo, partículas de fogo, fundo esquentando, "batimento";
+       lendario ..... câmera lenta na parada, raios, chuva de moedas, zoom;
+       jackpot ...... só na Curinga total: tudo isso mais o monograma LA em tela cheia e fogos.
+     A tela cheia comemora, no mínimo, como "lendario".
 
      COMO AJUSTAR AS FRONTEIRAS
-     - "aPartirDe" é o multiplicador em que a faixa começa; ela vai até a próxima faixa começar.
-       Ex.: para o "quente" começar no 3x, troque o 4 por 3 (aí o "morno" fica só com 1x e 2x).
-     - Mantenha os 5 ids como estão (sem acento). A ordem das linhas não importa: vale o "aPartirDe".
-     - Para uma etapa ter outra faixa, sem mexer aqui, escreva "intensidade" nela, na lista de etapas.
-       Ex.: { multiplicador: 10, intensidade: 'lendario', ganhou: …, perdeu: … }. Isso vale só para ela. */
+     - "aPartirDe" é o multiplicador acumulado em que a faixa começa; ela vai até a próxima começar.
+     - Mantenha os ids como estão (sem acento). A ordem das linhas não importa: vale o "aPartirDe".
+     - O "jackpot" é reservado à Curinga total e não tem fronteira. */
   intensidades: [
     { id: 'morno',        aPartirDe: 1 },
-    { id: 'quente',       aPartirDe: 4 },
-    { id: 'pegando-fogo', aPartirDe: 8 },
-    { id: 'lendario',     aPartirDe: 13 },
-    { id: 'jackpot',      aPartirDe: 20 },
+    { id: 'quente',       aPartirDe: 7 },
+    { id: 'pegando-fogo', aPartirDe: 101 },
+    { id: 'lendario',     aPartirDe: 25001 },
+    { id: 'jackpot',      aPartirDe: 'só na Curinga total' },
   ],
 
   /* ---------- SÍMBOLOS DO TABULEIRO ----------
@@ -261,6 +295,8 @@ window.CONFIG = {
      - id: não mude. É o nome do símbolo no código.
      - nome: o que os leitores de tela falam e o que aparece no cartão neutro de reserva.
      - imagem: o nome do asset (no bloco ASSETS) que mostra o símbolo. Já vem preenchido.
+     - especial: true nos 4 símbolos especiais, que valem o dobro dos comuns nas formações. Sem a marca
+       o símbolo conta como comum. A Carta LA (carta: true) é o Coringa e não tem categoria.
 
      COMO TROCAR A IMAGEM DE UM SÍMBOLO (ex.: uma foto real do texugo):
        1. Deixe a imagem quadrada e leve: PNG ou WebP, uns 256×256 px, de preferência com fundo
@@ -273,10 +309,10 @@ window.CONFIG = {
      toda do mesmo jeito). Se o nome não existir no ASSETS ou a imagem estiver corrompida, a célula
      mostra um cartão neutro com o nome do símbolo e o problema aparece só no console do navegador. */
   simbolos: [
-    { id: 'texugo',      nome: 'Texugo',      imagem: 'texugo' },
-    { id: 'flor-de-lis', nome: 'Flor de lis', imagem: 'flor-de-lis' },
-    { id: 'lulu',        nome: 'Lulu',        imagem: 'lulu' },
-    { id: 'hunch',       nome: 'HUNCH',       imagem: 'hunch' },
+    { id: 'texugo',      nome: 'Texugo',      imagem: 'texugo',      especial: true },
+    { id: 'flor-de-lis', nome: 'Flor de lis', imagem: 'flor-de-lis', especial: true },
+    { id: 'lulu',        nome: 'Lulu',        imagem: 'lulu',        especial: true },
+    { id: 'hunch',       nome: 'HUNCH',       imagem: 'hunch',       especial: true },
     { id: 'carta',       nome: 'Carta LA',    imagem: 'carta', carta: true },
     { id: 'dinheiro',    nome: 'Dinheiro',    imagem: 'dinheiro' },
     { id: 'aperol',      nome: 'Aperol',      imagem: 'aperol' },
@@ -292,17 +328,17 @@ window.CONFIG = {
 
   /* ---------- TEMPOS ----------
      Ritmo da rodada. Durações em milissegundos (1000 = 1 segundo).
-     Como a rodada anda: a cada etapa os rolos giram e param um de cada vez (da esquerda para a
-     direita) e a etapa é anunciada ("ROUND 3 · 3x"). As etapas encurtam aos poucos. A última etapa,
-     a do desfecho, tem suspense: o último rolo gira mais lento, "quase" completando.
-     Com os valores abaixo: uma rodada que termina em 1x leva uns 4 s, uma que vai até 20x uns 14 s, e
-     a rodada média (com as chances padrão) uns 6 s.
+     Como a rodada anda: a cada giro os rolos giram e param um de cada vez (da esquerda para a
+     direita) e o giro é anunciado ("ROUND 3 · x12"). Os giros encurtam aos poucos. O último giro,
+     o da parada, tem suspense: o último rolo gira mais lento, "quase" completando.
+     Com os valores abaixo: uma rodada que quebra no 1º giro leva uns 4 s, uma que vai até o giro 20
+     uns 14 s, e a rodada média (com as chances padrão) uns 6 a 7 s.
      - velocidade: multiplica a velocidade de TUDO. 1 = normal; 2 = duas vezes mais rápido (metade do
        tempo); 0.5 = duas vezes mais lento.
-     - primeiraEtapaMs: duração da 1ª etapa (giro + paradas + anúncio). As seguintes ficam um pouco
-       mais curtas a cada etapa...
+     - primeiraEtapaMs: duração do 1º giro (giro + paradas + anúncio). Os seguintes ficam um pouco
+       mais curtos a cada giro...
      - etapaMaisCurtaMs: ...até chegar a esta duração mínima.
-     - suspenseMs: na última etapa, quanto tempo a mais o último rolo leva para parar (o "quase").
+     - suspenseMs: no último giro, quanto tempo a mais o último rolo leva para parar (o "quase").
      - pausaAntesDoResultadoMs: depois da última parada, quanto tempo até o resultado aparecer. */
   tempos: {
     velocidade: 1,
@@ -314,7 +350,7 @@ window.CONFIG = {
 
   /* ---------- SOM ----------
      Efeitos sonoros gerados na hora (sem arquivo de áudio e sem música de fundo): tique dos rolos,
-     parada, subida de etapa, fanfarra de vitória e "K.O." na derrota.
+     parada, subida de giro, fanfarra de vitória e "K.O." na derrota.
      - ligado: true = o jogo começa com som; false = começa mudo. Nos dois casos o botão de
        som (ao lado do placar) liga e desliga a qualquer momento, inclusive durante a rodada.
      - volume: de 0 (mudo) a 1 (máximo). O 1 já é moderado, pensado para um salão com gente perto.
@@ -659,6 +695,10 @@ window.CONFIG = {
   #anunciador[data-tom="round"] { color: var(--tinta-vinho); }
   #anunciador .anuncio-ponto { color: var(--coral-600); }
   #anunciador .anuncio-mult { color: var(--tinta-vinho); text-transform: none; }
+  /* Nome da formação (depois do "ROUND N"): quebra em até duas linhas para caber ao lado do multiplicador. */
+  #anunciador[data-tom="formacao"] { white-space: normal; line-height: 1.3; color: var(--tinta-vinho); }
+  #anunciador[data-tom="formacao"][data-especial="sim"] { color: var(--coral-700); }
+  #anunciador .anuncio-mais { color: var(--coral-600); }
   /* Multiplicador em destaque: o selo explode a cada etapa nova (anel e faíscas em Coral e Pêssego por trás do número). */
   #faixa-multiplicador { z-index: 2; }
   #selo-multiplicador {
@@ -924,6 +964,15 @@ window.CONFIG = {
   #barra-ganho::before { left: calc(var(--moeda) * -.5); }
   #barra-ganho::after { right: calc(var(--moeda) * -.5); }
   #barra-ganho .texto-numero { font-family: var(--fonte-display); line-height: 1.2; }
+  /* Barra validando o acumulado na Parada (Quebra com x2 ou mais, Tela Cheia, Curinga Total): filete Vinho e brilho. */
+  #barra-ganho.validada {
+    border-color: var(--vinho-700);
+    background: var(--cartao);
+    box-shadow: inset 0 2px 0 var(--brilho-cartao), inset 0 -4px 8px var(--sombra-vinho-suave), 0 0 0 3px var(--coral-400), 0 4px 14px var(--sombra-vinho);
+  }
+  /* "x∞" desenhado: as fontes embutidas não têm o glifo. Laço do infinito em Tinta vinho, no traço arredondado do monograma. */
+  .infinito { display: inline-block; width: 1.25em; height: .62em; margin-left: .06em; vertical-align: -.02em; overflow: visible; }
+  .infinito path { fill: none; stroke: var(--tinta-vinho); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
   #rotulo-ganho { font-size: clamp(18px, calc(var(--gu) * 5.6), 45px); }
   #valor-ganho { font-size: clamp(22px, calc(var(--gu) * 7.4), 60px); }
 
@@ -1072,6 +1121,127 @@ window.CONFIG = {
     font-size: clamp(20px, calc(var(--gu) * 6.2), 50px);
   }
 
+  /* ---------- 2.10.0 DESTAQUE DAS FORMAÇÕES, SELOS DO FATOR E SELO MAX ----------
+     Camadas criadas pelo código do app (5.7.0), por cima dos rolos, dentro do #tabuleiro. Só opacity e transform
+     mudam na animação. Em cada giro com combinação:
+     - .casa.acesa: as casas da formação (anel Vinho; Coral nos ícones especiais);
+     - .traco: o traço da linha de pagamento (3 horizontais e 2 diagonais), Vinho com miolo Coral;
+     - .contorno: o contorno das 5 casas de uma Forma (L, T e cruz);
+     - .selo: o selo do fator ("LINHA x2"), Cartão com texto Tinta vinho, ou Coral nos ícones especiais.
+     --S é o lado útil da camada (o mesmo do tabuleiro sem o recuo), --w a casa e --p o passo de uma casa à outra. */
+  .camada-destaque {
+    --S: calc(var(--lado) - 2 * var(--borda-tabuleiro) - 2 * var(--recuo));
+    --w: calc((var(--S) - 2 * var(--vao)) / 3);
+    --p: calc(var(--w) + var(--vao));
+    position: absolute;
+    inset: var(--recuo);
+    pointer-events: none;
+  }
+  .destaque-casas {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    grid-auto-flow: column; /* as casas vêm rolo a rolo, como as células */
+    gap: var(--vao);
+  }
+  .destaque-casas .casa { position: relative; border-radius: 16%; opacity: 0; }
+  .destaque-casas .casa::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: var(--coral-200); opacity: .3; }
+  .destaque-casas .casa::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 calc(var(--lado) * .014) var(--vinho-700);
+  }
+  .destaque-casas .casa[data-especial="sim"]::after { box-shadow: inset 0 0 0 calc(var(--lado) * .014) var(--coral-600); }
+  .destaque-casas .casa[data-forma="sim"]::after { box-shadow: none; } /* na Forma quem desenha é o contorno das 5 casas */
+  .destaque-tracos { position: absolute; inset: 0; }
+  .traco {
+    position: absolute;
+    height: calc(var(--lado) * .05);
+    margin-top: calc(var(--lado) * -.025);
+    border-radius: 999px;
+    background: var(--vinho-700);
+    box-shadow: 0 0 calc(var(--lado) * .025) var(--lirio-300);
+    transform-origin: 0 50%;
+    opacity: 0;
+  }
+  .traco::after { content: ''; position: absolute; left: 3%; right: 3%; top: 30%; bottom: 30%; border-radius: 999px; background: var(--coral-400); }
+  .traco[data-especial="sim"] { background: var(--coral-700); box-shadow: 0 0 calc(var(--lado) * .03) var(--pessego-300); }
+  .traco[data-especial="sim"]::after { background: var(--coral-200); }
+  .traco.h { left: -2%; width: 104%; top: calc(var(--r) * var(--p) + var(--w) / 2); }
+  /* Diagonais: 1,3 × o lado útil, centradas na camada, partindo de um canto (a animação cresce a partir dele). */
+  .traco.d { width: calc(var(--S) * 1.3); top: calc(var(--S) * .0404); }
+  .traco.d1 { left: calc(var(--S) * .0404); transform: rotate(45deg); }
+  .traco.d2 { left: calc(var(--S) * .9596); transform: rotate(135deg); }
+  .contorno {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .contorno path { vector-effect: non-scaling-stroke; opacity: 0; }
+  .contorno .contorno-base { stroke: var(--vinho-700); stroke-width: calc(var(--lado) * .05); }
+  .contorno .contorno-miolo { stroke: var(--coral-400); stroke-width: calc(var(--lado) * .018); }
+  .contorno[data-especial="sim"] .contorno-base { stroke: var(--coral-700); }
+  .contorno[data-especial="sim"] .contorno-miolo { stroke: var(--coral-200); }
+  .selos {
+    --selo-h: calc(var(--lado) * .1);
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(var(--selo-h) / -2);
+    bottom: calc(var(--selo-h) / -2);
+    display: flex;
+    flex-direction: column-reverse; /* o 1º selo na borda de baixo, o 2º (giro duplo) na de cima */
+    justify-content: space-between;
+    align-items: center;
+    pointer-events: none;
+    z-index: 2;
+  }
+  .selo {
+    display: flex;
+    align-items: center;
+    height: var(--selo-h);
+    padding: 0 calc(var(--lado) * .035);
+    border: 2px solid var(--vinho-700);
+    border-radius: 8px;
+    background: var(--cartao);
+    box-shadow: 0 3px 8px var(--sombra-vinho);
+    font-family: var(--fonte-pixel);
+    font-size: clamp(8px, calc(var(--lado) * .038), 20px);
+    line-height: 1;
+    white-space: nowrap;
+    color: var(--tinta-vinho);
+    opacity: 0;
+  }
+  .selo[data-especial="sim"] { border-color: var(--coral-700); color: var(--coral-700); }
+  /* Selo MAX: aparece ao lado do multiplicador (e na barra "Ganho" e no resultado) enquanto o teto vale. */
+  .selo-max {
+    display: none;
+    flex: none;
+    align-items: center;
+    padding: .45em .6em;
+    border: 2px solid var(--coral-700);
+    border-radius: 6px;
+    background: var(--cartao);
+    box-shadow: 0 2px 5px var(--sombra-vinho);
+    font-family: var(--fonte-pixel);
+    font-size: clamp(8px, calc(var(--gu) * 2.4), 18px);
+    line-height: 1;
+    color: var(--coral-700);
+    transform: rotate(-5deg);
+  }
+  #jogo[data-teto="sim"] .selo-max { display: inline-flex; }
+  #selo-multiplicador .selo-max { order: -1; margin-right: .5em; font-size: clamp(7px, calc(var(--gu) * 2), 15px); } /* à esquerda do número, sem cobrir nenhum dígito */
+  #jogo:not([data-teto="sim"]) #painel-resultado .selo-max { display: none; }
+
   /* ---------- 2.10.1 REVELAÇÃO FINAL (vitória e derrota) E FESTA ----------
      Camadas por cima das células, dentro do #tabuleiro (criadas pelo código do app, 5.7.1). Todas
      começam invisíveis e só a opacidade e o transform delas mudam:
@@ -1084,22 +1254,9 @@ window.CONFIG = {
   .camada-revelacao { position: absolute; inset: var(--recuo); pointer-events: none; opacity: 0; visibility: hidden; }
   .camada-revelacao.ativa { visibility: visible; }
   .morto { background: var(--papel-creme); border-radius: 8px; }
-  .linhas-pagamento { opacity: 1; }
-  .linhas-pagamento .linha {
-    position: absolute;
-    left: -2%;
-    right: -2%;
-    height: calc(var(--lado) * .034);
-    margin-top: calc(var(--lado) * -.017);
-    border-radius: 999px;
-    background: linear-gradient(90deg, transparent, var(--coral-400) 8%, var(--coral-500) 50%, var(--coral-400) 92%, transparent);
-    box-shadow: 0 0 calc(var(--lado) * .025) var(--pessego-300), 0 0 calc(var(--lado) * .06) var(--lirio-300);
-    transform-origin: 0 50%;
-    opacity: 0;
-  }
-  .linhas-pagamento .linha[data-linha="2"] { top: 16.67%; }
-  .linhas-pagamento .linha[data-linha="1"] { top: 50%; }
-  .linhas-pagamento .linha[data-linha="3"] { top: 83.33%; }
+  /* Tela cheia e Curinga total: as 9 casas acesas juntas (a grade .destaque-casas é a do destaque das formações). */
+  .tela-cheia .destaque-casas .casa::before { opacity: .38; }
+  .tela-cheia .destaque-casas .casa::after { box-shadow: inset 0 0 0 calc(var(--lado) * .018) var(--vinho-700), 0 0 calc(var(--lado) * .03) var(--lirio-300); }
   .ko {
     inset: 0;
     display: flex;
@@ -1527,6 +1684,7 @@ window.CONFIG = {
         <span id="selo-multiplicador">
           <span class="estouro" aria-hidden="true"><b class="anel"></b><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
           <span id="multiplicador" class="texto-numero"></span>
+          <b class="selo-max" aria-hidden="true"></b>
         </span>
       </div>
 
@@ -1543,6 +1701,7 @@ window.CONFIG = {
       <div id="barra-ganho">
         <span id="rotulo-ganho" class="texto-numero"></span>
         <span id="valor-ganho" class="texto-numero"></span>
+        <b class="selo-max" aria-hidden="true"></b>
       </div>
 
       <!-- Placar decorativo (as pílulas vêm de textos.placar) e o botão de som (mudo), nunca travado -->
@@ -1558,6 +1717,7 @@ window.CONFIG = {
         <div class="resultado-cabecalho">
           <p id="resultado-tipo"></p>
           <p id="resultado-multiplicador" class="texto-numero"></p>
+          <b class="selo-max" aria-hidden="true"></b>
         </div>
         <h2 id="resultado-titulo" class="texto-numero"></h2>
         <p id="resultado-mensagem"></p>
@@ -2529,12 +2689,45 @@ window.CONFIG = {
   function ehTexto(valor) {
     return typeof valor === 'string' && valor.trim() !== '';
   }
+  // "x1.024": prefixo x e separador de milhar pt-BR (sem abreviação). Infinity vira "x∞".
   function formatarMultiplicador(multiplicador) {
-    return String(multiplicador).replace('.', ',') + 'x';
+    if (multiplicador === Infinity) return 'x∞';
+    const n = Math.max(0, Math.round(Number(multiplicador) || 0));
+    return 'x' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   }
   // SVG criado pelo código (células do tabuleiro, imagens dos símbolos).
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const XLINK_NS = 'http://www.w3.org/1999/xlink';
+  // Escreve o multiplicador num elemento. O "∞" não existe nas fontes embutidas: o x∞ da Curinga total é um "x"
+  // seguido de um SVG (laço do infinito em Tinta vinho, com o traço arredondado do monograma). Os valores finitos
+  // são só texto. O SVG tem rótulo para leitores de tela.
+  function escreverMultiplicador(elemento, multiplicador) {
+    if (multiplicador !== Infinity) {
+      const texto = formatarMultiplicador(multiplicador);
+      if (elemento.textContent !== texto || elemento.firstElementChild) elemento.textContent = texto;
+      delete elemento.dataset.infinito;
+      return;
+    }
+    if (elemento.dataset.infinito === 'sim') return;
+    elemento.textContent = 'x';
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('class', 'infinito');
+    svg.setAttribute('viewBox', '0 0 64 32');
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('focusable', 'false');
+    svg.setAttribute('aria-label', (typeof app !== 'undefined' && app.config && app.config.textos.infinitoLeitor) || TEXTOS_PADRAO.infinitoLeitor);
+    const laco = document.createElementNS(SVG_NS, 'path');
+    laco.setAttribute('d', 'M32 16C26 6 9 5 9 16C9 27 26 26 32 16C38 6 55 5 55 16C55 27 38 26 32 16Z');
+    svg.appendChild(laco);
+    elemento.appendChild(svg);
+    elemento.dataset.infinito = 'sim';
+  }
+  // Tipo da Parada para a tela e para o leitor de tela ("Combo quebrado", "Tela cheia!", "Curinga total!").
+  function tipoDaParada(parada, textos) {
+    if (parada === 'telaCheia') return textos.tipoTelaCheia;
+    if (parada === 'suprema') return textos.tipoSuprema;
+    return textos.tipoQuebra;
+  }
   // Aponta um <use>/<image> do SVG para um símbolo do sprite ('#sb-…') ou para uma imagem (data URI).
   // Usa href e também xlink:href (Safari antigo). '' tira o apontamento. Só mexe se mudou.
   function apontarPara(elemento, alvo) {
@@ -2560,14 +2753,27 @@ window.CONFIG = {
     botaoJogarDeNovo: 'Jogar de novo',
     avisoBrincadeira: 'É só brincadeira: nenhum dinheiro passa por aqui.',
     avisoGirar: 'Gire o celular para jogar',
-    rotuloEtapa: 'Etapa',
+    rotuloGiro: 'Giro',
     rotuloRound: 'ROUND',
     rotuloGanho: 'Ganho',
     placar: ['Saldo: ∞ amor', 'Torcida: 100%'],
-    tipoGanhou: 'Ganhou!',
-    tipoPerdeu: 'Perdeu!',
+    tipoQuebra: 'Combo quebrado',
+    tipoTelaCheia: 'Tela cheia!',
+    tipoSuprema: 'Curinga total!',
+    infinitoLeitor: 'infinito',
     palavraDerrota: 'K.O.',
+    palavraTelaCheia: 'TELA CHEIA!',
     palavraVitoriaMaxima: 'PERFECT!',
+    nomeLinha: 'LINHA',
+    nomeLinhaEspecial: 'LINHA ESPECIAL',
+    nomeLinhaMista: 'LINHA MISTA',
+    nomeLinhaCoringa: 'CORINGA',
+    nomeFormaL: 'L',
+    nomeFormaT: 'T',
+    nomeFormaCruz: 'CRUZ',
+    sufixoEspecial: 'ESPECIAL',
+    prefixoFormaCoringa: 'CORINGA EM',
+    seloTeto: 'MAX',
   };
   const LIMITE_PILULAS = 3; // o placar decorativo mostra até 3 pílulas
   const SIMBOLOS_PADRAO = [
@@ -2581,10 +2787,10 @@ window.CONFIG = {
     { id: 'noiva', nome: 'Noiva', imagem: 'noiva' }, { id: 'noivo', nome: 'Noivo', imagem: 'noivo' },
   ];
   const INTENSIDADES_PADRAO = [
-    { id: 'morno', aPartirDe: 1 }, { id: 'quente', aPartirDe: 4 }, { id: 'pegando-fogo', aPartirDe: 8 },
-    { id: 'lendario', aPartirDe: 13 }, { id: 'jackpot', aPartirDe: 20 },
+    { id: 'morno', aPartirDe: 1 }, { id: 'quente', aPartirDe: 7 }, { id: 'pegando-fogo', aPartirDe: 101 },
+    { id: 'lendario', aPartirDe: 25001 },
   ];
-  const IDS_INTENSIDADE = INTENSIDADES_PADRAO.map(function (f) { return f.id; });
+  const IDS_INTENSIDADE = INTENSIDADES_PADRAO.map(function (f) { return f.id; }).concat(['jackpot']);
   // Aceita o id com acento, espaço ou maiúscula ("Lendário", "pegando fogo"); devolve '' se não for uma faixa conhecida.
   function idIntensidade(valor, onde) {
     if (!ehTexto(valor)) return '';
@@ -2672,69 +2878,160 @@ window.CONFIG = {
     return lista;
   }
 
-  function prepararDesfecho(bloco, tipo, multiplicador, onde) {
-    const b = ehObjeto(bloco) ? bloco : {};
-    const lugar = onde + '.' + tipo;
-    const tituloPadrao = (tipo === 'ganhou' ? 'Ganhou em ' : 'Perdeu em ') + formatarMultiplicador(multiplicador);
-    const mensagemPadrao = tipo === 'ganhou' ? 'O tigrinho soltou a carta!' : 'O tigrinho guardou a carta.';
-    let titulo = tituloPadrao;
-    if (ehTexto(b.titulo)) {
-      titulo = b.titulo;
-      avisarSeLongo(titulo, LIMITE_TITULO, lugar + '.titulo');
-    } else {
-      avisar('Título vazio ou inválido em ' + lugar + '.titulo: usando "' + tituloPadrao + '".');
-    }
-    return {
-      chance: chanceSegura(b.chance, lugar + '.chance'),
-      titulo: titulo,
-      mensagens: listaDeMensagens(b.mensagem, mensagemPadrao, lugar + '.mensagem'),
-    };
-  }
+  // Textos de uma parada que o Motor monta na hora (título da tela cheia leva o nome do ícone).
+  const TITULO_TELA_CHEIA_PADRAO = 'Tela cheia de {simbolo}!';
+  const TITULO_SUPREMA_PADRAO = 'Curinga total!';
+  const MENSAGEM_SUPREMA_PADRAO = 'A Carta LA tomou o tabuleiro inteiro!';
 
-  // Conjunto seguro: 20 etapas (1x a 20x) com chances uniformes (2.5 cada, soma 100), como pede o spec.
-  function etapasSeguras() {
+  // Giros seguros: 20 giros com chances simples (a quebra existe em todos; as vitórias só a partir do 2º).
+  function girosSeguros() {
     const lista = [];
-    for (let m = 1; m <= 20; m++) {
-      lista.push({
-        multiplicador: m,
-        ganhou: { chance: 2.5, titulo: 'Ganhou em ' + m + 'x', mensagem: 'O tigrinho soltou a carta!' },
-        perdeu: { chance: 2.5, titulo: 'Perdeu em ' + m + 'x', mensagem: 'O tigrinho guardou a carta.' },
-      });
-    }
+    for (let i = 1; i <= 20; i++) lista.push({ quebra: 2.5, telaCheia: i > 1 ? 2 : 0, suprema: i > 1 ? 0.5 : 0 });
     return lista;
   }
 
-  // Qualquer quantidade de etapas funciona (o máximo do jogo é a última da lista).
-  // Entradas quebradas são ignoradas; lista vazia ou quebrada vira 20 etapas seguras.
-  function prepararEtapas(cruas) {
+  // Cada giro traz as chances de a rodada parar nele por quebra, telaCheia e suprema. No giro 1 só a quebra
+  // existe (as vitórias são de re-spin). Entradas quebradas são ignoradas; lista vazia vira 20 giros seguros.
+  function prepararGiros(cruas) {
     let lista = [];
     if (Array.isArray(cruas)) {
-      cruas.forEach(function (etapa, i) {
-        if (ehObjeto(etapa)) lista.push({ etapa: etapa, onde: 'etapas[' + i + ']' });
-        else avisar('etapas[' + i + '] não é uma etapa válida (' + JSON.stringify(etapa) + '): ignorada.');
+      cruas.forEach(function (giro, i) {
+        if (ehObjeto(giro)) lista.push({ giro: giro, onde: 'giros[' + i + ']' });
+        else avisar('giros[' + i + '] não é um giro válido (' + JSON.stringify(giro) + '): ignorado.');
       });
     }
     if (!lista.length) {
-      avisar('A lista "etapas" está vazia ou quebrada: usando 20 etapas seguras (1x a 20x).');
-      lista = etapasSeguras().map(function (etapa, i) { return { etapa: etapa, onde: 'etapas seguras[' + i + ']' }; });
+      avisar('A lista "giros" está vazia ou quebrada: usando 20 giros seguros.');
+      lista = girosSeguros().map(function (giro, i) { return { giro: giro, onde: 'giros seguros[' + i + ']' }; });
     }
     return lista.map(function (item, i) {
-      const etapa = item.etapa;
-      const onde = item.onde;
-      const multiplicador = numeroSeguro(etapa.multiplicador, i + 1, 0, onde + '.multiplicador');
-      return {
-        multiplicador: multiplicador,
-        intensidade: idIntensidade(etapa.intensidade, onde), // se vier, sobrescreve a faixa desta etapa
-        ganhou: prepararDesfecho(etapa.ganhou, 'ganhou', multiplicador, onde),
-        perdeu: prepararDesfecho(etapa.perdeu, 'perdeu', multiplicador, onde),
-      };
+      const g = item.giro;
+      const pronto = { quebra: chanceSegura(g.quebra, item.onde + '.quebra'), telaCheia: 0, suprema: 0 };
+      if (i === 0) {
+        if (Number(g.telaCheia) > 0 || Number(g.suprema) > 0) {
+          avisar(item.onde + ': telaCheia e suprema só acontecem em re-spin (a partir do giro 2): contando como 0 no giro 1.');
+        }
+      } else {
+        pronto.telaCheia = chanceSegura(g.telaCheia, item.onde + '.telaCheia');
+        pronto.suprema = chanceSegura(g.suprema, item.onde + '.suprema');
+      }
+      return pronto;
     });
+  }
+
+  const TIPOS_DE_FORMACAO = ['linha', 'linhaMista', 'forma', 'linhaCoringa', 'formaCoringa'];
+  const FORMACOES_PADRAO = {
+    linha: { peso: 45, comum: 2 }, linhaMista: { peso: 25, fator: 5 }, forma: { peso: 15, comum: 3 },
+    linhaCoringa: { peso: 10, fator: 6 }, formaCoringa: { peso: 5, fator: 9 }, giroDuplo: 25, teto: 999999,
+  };
+  function prepararFormacoes(cru) {
+    const c = ehObjeto(cru) ? cru : {};
+    if (cru !== undefined && !ehObjeto(cru)) avisar('Seção "formacoes" inválida: usando os pesos e fatores padrão.');
+    const pronto = {};
+    TIPOS_DE_FORMACAO.forEach(function (tipo) {
+      const padrao = FORMACOES_PADRAO[tipo];
+      const lugar = 'formacoes.' + tipo;
+      let b = c[tipo];
+      if (!ehObjeto(b)) {
+        if (cru !== undefined && b !== undefined) avisar(lugar + ' inválido: usando o padrão.');
+        else if (cru !== undefined) avisar(lugar + ' ausente: usando o padrão.');
+        b = Object.assign({}, padrao);
+      }
+      const peso = chanceSegura(b.peso, lugar + '.peso');
+      if (padrao.fator !== undefined) {
+        pronto[tipo] = { peso: peso, fator: numeroSeguro(b.fator, padrao.fator, 1, lugar + '.fator') };
+      } else {
+        const comum = numeroSeguro(b.comum, padrao.comum, 1, lugar + '.comum');
+        // O especial vale o dobro do comum, a menos que o padrinho escreva outro valor.
+        const especial = b.especial === undefined ? comum * 2 : numeroSeguro(b.especial, comum * 2, 1, lugar + '.especial');
+        pronto[tipo] = { peso: peso, comum: comum, especial: especial };
+      }
+    });
+    if (!TIPOS_DE_FORMACAO.some(function (tipo) { return pronto[tipo].peso > 0; })) {
+      avisar('Todos os pesos de "formacoes" estão zerados ou inválidos: todos os tipos passam a ter o mesmo peso.');
+      TIPOS_DE_FORMACAO.forEach(function (tipo) { pronto[tipo].peso = 1; });
+    }
+    let duplo = chanceSegura(c.giroDuplo === undefined ? FORMACOES_PADRAO.giroDuplo : c.giroDuplo, 'formacoes.giroDuplo');
+    if (duplo > 100) {
+      avisar('formacoes.giroDuplo é uma porcentagem (até 100): usando 100.');
+      duplo = 100;
+    }
+    pronto.giroDuplo = duplo;
+    pronto.teto = Math.floor(numeroSeguro(c.teto, FORMACOES_PADRAO.teto, 1, 'formacoes.teto'));
+    return pronto;
+  }
+
+  const FAIXAS_PADRAO = [
+    { id: 'quebraImediata', de: 1, ate: 1, titulo: 'K.O. no primeiro giro' },
+    { id: 'inicial', de: 2, ate: 6, titulo: 'Início tímido' },
+    { id: 'intermediaria', de: 7, ate: 100, titulo: 'Bola de neve crescendo' },
+    { id: 'avancada', de: 101, ate: 25000, titulo: 'Sequência absurda' },
+    { id: 'lendaria', de: 25001, ate: Infinity, titulo: 'Combo lendário' },
+  ];
+  const MENSAGEM_FAIXA_PADRAO = 'O tigrinho guardou a carta.';
+  // Cada faixa vale do "de" até o começo da próxima. O "ate" só serve para avisar de buracos e sobreposições.
+  function prepararFaixas(cruas) {
+    let lista = [];
+    if (Array.isArray(cruas)) {
+      cruas.forEach(function (f, i) {
+        const onde = 'faixas[' + i + ']';
+        if (!ehObjeto(f) || !ehTexto(f.id) || !(Number(f.de) >= 0) || f.de === null || f.de === '') {
+          avisar(onde + ' não é uma faixa válida (precisa de id e "de"): ignorada.');
+          return;
+        }
+        const padrao = FAIXAS_PADRAO.filter(function (p) { return p.id === f.id; })[0];
+        let titulo = padrao ? padrao.titulo : String(f.id);
+        if (ehTexto(f.titulo)) {
+          titulo = f.titulo;
+          avisarSeLongo(titulo, LIMITE_TITULO, onde + '.titulo');
+        } else avisar('Título vazio ou inválido em ' + onde + '.titulo: usando "' + titulo + '".');
+        const ate = f.ate === undefined || f.ate === null || f.ate === '' ? Infinity : Number(f.ate);
+        lista.push({ id: f.id, de: Number(f.de), ate: Number.isFinite(ate) || ate === Infinity ? ate : Infinity,
+          titulo: titulo, mensagens: listaDeMensagens(f.mensagem, MENSAGEM_FAIXA_PADRAO, onde + '.mensagem') });
+      });
+    }
+    if (!lista.length) {
+      if (cruas !== undefined) avisar('A lista "faixas" está vazia ou quebrada: usando as faixas padrão com mensagem segura.');
+      lista = FAIXAS_PADRAO.map(function (p) { return Object.assign({}, p, { mensagens: [MENSAGEM_FAIXA_PADRAO] }); });
+    }
+    lista.sort(function (a, b) { return a.de - b.de; });
+    lista.forEach(function (f, i) {
+      const proxima = lista[i + 1];
+      if (proxima && f.ate !== Infinity && proxima.de !== f.ate + 1) {
+        avisar('A faixa "' + f.id + '" vai até ' + f.ate + ' e a próxima ("' + proxima.id + '") começa em ' + proxima.de + ': vale o começo da próxima.');
+      }
+    });
+    if (lista[0].de > 1) avisar('A primeira faixa começa em ' + lista[0].de + ': multiplicadores menores usam essa faixa.');
+    return lista;
+  }
+
+  function prepararTelaCheia(cru) {
+    const b = ehObjeto(cru) ? cru : {};
+    if (cru !== undefined && !ehObjeto(cru)) avisar('Seção "telaCheia" inválida: usando o título padrão.');
+    let titulo = TITULO_TELA_CHEIA_PADRAO;
+    if (ehTexto(b.titulo)) {
+      titulo = b.titulo;
+      avisarSeLongo(titulo, LIMITE_TITULO, 'telaCheia.titulo');
+    } else if (cru !== undefined) avisar('Título vazio ou inválido em telaCheia.titulo: usando "' + titulo + '".');
+    return { titulo: titulo };
+  }
+
+  function prepararSuprema(cru) {
+    const b = ehObjeto(cru) ? cru : {};
+    if (cru !== undefined && !ehObjeto(cru)) avisar('Seção "suprema" inválida: usando o título e a mensagem padrão.');
+    let titulo = TITULO_SUPREMA_PADRAO;
+    if (ehTexto(b.titulo)) {
+      titulo = b.titulo;
+      avisarSeLongo(titulo, LIMITE_TITULO, 'suprema.titulo');
+    } else if (cru !== undefined) avisar('Título vazio ou inválido em suprema.titulo: usando "' + titulo + '".');
+    return { titulo: titulo, mensagens: listaDeMensagens(b.mensagem, MENSAGEM_SUPREMA_PADRAO, 'suprema.mensagem') };
   }
 
   function prepararIntensidades(cruas) {
     const lista = Array.isArray(cruas)
       ? cruas.filter(function (f, i) {
-        return ehObjeto(f) && idIntensidade(f.id, 'intensidades[' + i + ']') && Number.isFinite(Number(f.aPartirDe));
+        // O "jackpot" é reservado à Curinga total: não tem fronteira (a entrada, se existir, é ignorada).
+        return ehObjeto(f) && idIntensidade(f.id, 'intensidades[' + i + ']') !== 'jackpot' && idIntensidade(f.id, 'intensidades[' + i + ']') !== '' && Number.isFinite(Number(f.aPartirDe));
       })
       : [];
     if (!lista.length) {
@@ -2756,7 +3053,7 @@ window.CONFIG = {
       if (s.imagem !== undefined && s.imagem !== '' && !ehTexto(s.imagem)) {
         avisar('simbolos "' + s.id + '": imagem deve ser o nome de um asset entre aspas (' + JSON.stringify(s.imagem) + '): mostrando o cartão neutro.');
       }
-      return { id: s.id, nome: ehTexto(s.nome) ? s.nome : s.id, imagem: ehTexto(s.imagem) ? s.imagem.trim() : '', carta: s.carta === true };
+      return { id: s.id, nome: ehTexto(s.nome) ? s.nome : s.id, imagem: ehTexto(s.imagem) ? s.imagem.trim() : '', carta: s.carta === true, especial: s.especial === true };
     });
     lista.forEach(function (s) {
       if (!s.imagem) avisar('Símbolo "' + s.id + '" sem imagem: a célula mostra o cartão neutro com o nome dele (preencha o campo "imagem").');
@@ -2764,7 +3061,9 @@ window.CONFIG = {
     const cartas = lista.filter(function (s) { return s.carta; });
     if (cartas.length === 0) {
       avisar('Nenhum símbolo marcado como Carta (carta: true): usando a Carta LA padrão.');
-      lista.push({ id: 'carta', nome: 'Carta LA', imagem: 'carta', carta: true });
+      const existente = lista.filter(function (s) { return s.id === 'carta'; })[0];
+      if (existente) existente.carta = true; // o símbolo "carta" da lista vira a Carta (sem repetir o id)
+      else lista.push({ id: 'carta', nome: 'Carta LA', imagem: 'carta', carta: true });
     } else if (cartas.length > 1) {
       avisar('Mais de um símbolo marcado como Carta: só o primeiro vale.');
       lista.forEach(function (s) { if (s.carta && s !== cartas[0]) s.carta = false; });
@@ -2784,7 +3083,11 @@ window.CONFIG = {
     if (c.som !== undefined && !ehObjeto(c.som)) avisar('Seção "som" inválida: usando o som padrão.');
     return {
       textos: prepararTextos(c.textos),
-      etapas: prepararEtapas(c.etapas),
+      giros: prepararGiros(c.giros),
+      formacoes: prepararFormacoes(c.formacoes),
+      faixas: prepararFaixas(c.faixas),
+      telaCheia: prepararTelaCheia(c.telaCheia),
+      suprema: prepararSuprema(c.suprema),
       intensidades: prepararIntensidades(c.intensidades),
       simbolos: prepararSimbolos(c.simbolos),
       tempos: {
@@ -2801,46 +3104,148 @@ window.CONFIG = {
     };
   }
 
-  /* ---------- 5.3 MOTOR DE SORTEIO ----------
-     Não toca no DOM. Recebe a configuração preparada e uma fonte de aleatoriedade
-     (função que devolve um número em [0, 1)) e devolve o Resultado inteiro de uma vez:
-     { etapa, multiplicador, tipo, titulo, mensagem, chave, velocidade, duracaoMs, roteiro: [etapa 1 … etapa N] }.
-     duracaoMs = do toque até o resultado ficar visível (soma das etapas).
-     Cada passo do Roteiro: { etapa, multiplicador, intensidade, final, suspense, duracaoMs, paradasMs,
-     revelacaoMs, tabuleiro }:
-     - duracaoMs: duração da etapa (na última, até o resultado aparecer);
-     - paradasMs: [rolo 1, rolo 2, rolo 3] = quando cada rolo para, contado do começo da etapa;
-     - revelacaoMs: quando a etapa é anunciada (na parada do último rolo);
-     - suspense: true na última etapa (o último rolo gira mais lento, o "quase");
-     - tabuleiro[rolo][linha] = id do símbolo (3 rolos × 3 linhas) mostrado quando os rolos param.
+  /* ---------- 5.3 AVALIADOR DE TABULEIRO (puro: sem DOM e sem sorteio) ----------
+     A definição oficial do que vale num Tabuleiro. Recebe tabuleiro[rolo][linha] (ids de símbolo) e o
+     contexto das regras (Avaliador.contexto(config)) e devolve:
+       { parada, simbolo, formacoes, fator }
+     - parada: 'suprema' (9 Coringas), 'telaCheia' (9 casas com o mesmo ícone) ou null. Nos dois casos a
+       avaliação para aí: sem formações e fator 1;
+     - formacoes: [{ tipo, simbolo, fator, casas, ref, especial, desenho }], com tipo em linha, linhaMista,
+       linhaCoringa, forma e formaCoringa; casas = índices 0…8 (linha de cima para baixo, da esquerda para a
+       direita); ref = posição da linha em LINHAS ou da forma em FORMAS; desenho = cruz, T ou L (formas);
+     - fator: o produto dos fatores das formações (1 se não houver nenhuma).
+     Regras: linhas de pagamento são as 3 horizontais e as 2 diagonais (coluna sozinha não vale). Uma Forma
+     tem 5 casas do mesmo ícone (o Coringa NÃO substitui em formas): vale no máximo uma por giro, a de maior
+     fator (empate: a primeira da lista), e absorve a linha que está dentro dela. Uma linha fora da forma
+     contada vale: 3 Coringas = linha de Coringa; 3 ícones iguais = linha; o mesmo ícone com 1 ou 2
+     Coringas = linha mista. */
+  const Avaliador = (function () {
+    const LINHAS = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 4, 8], [2, 4, 6]];
+    const FORMAS = [
+      { desenho: 'cruz', casas: [1, 3, 4, 5, 7] },
+      { desenho: 'T', casas: [0, 1, 2, 4, 7] }, { desenho: 'T', casas: [6, 7, 8, 1, 4] },
+      { desenho: 'T', casas: [0, 3, 6, 4, 5] }, { desenho: 'T', casas: [2, 5, 8, 3, 4] },
+      { desenho: 'L', casas: [0, 3, 6, 1, 2] }, { desenho: 'L', casas: [0, 3, 6, 7, 8] },
+      { desenho: 'L', casas: [2, 5, 8, 0, 1] }, { desenho: 'L', casas: [2, 5, 8, 6, 7] },
+    ];
+
+    // Regras vindas da configuração: id da Carta, quem é especial e os fatores.
+    function contexto(config) {
+      const especiais = {};
+      config.simbolos.forEach(function (s) { if (s.especial && !s.carta) especiais[s.id] = true; });
+      const f = config.formacoes;
+      return {
+        carta: config.simbolos.filter(function (s) { return s.carta; })[0].id,
+        especiais: especiais,
+        fatores: { linha: f.linha, linhaMista: f.linhaMista.fator, forma: f.forma,
+          linhaCoringa: f.linhaCoringa.fator, formaCoringa: f.formaCoringa.fator },
+      };
+    }
+
+    function casasDe(tabuleiro) {
+      const casas = [];
+      for (let linha = 0; linha < 3; linha++) for (let rolo = 0; rolo < 3; rolo++) casas.push(tabuleiro[rolo][linha]);
+      return casas;
+    }
+
+    function avaliar(tabuleiro, ctx) {
+      const casas = casasDe(tabuleiro);
+      const carta = ctx.carta;
+      const f = ctx.fatores;
+      if (casas.every(function (id) { return id === casas[0]; })) {
+        return { parada: casas[0] === carta ? 'suprema' : 'telaCheia', simbolo: casas[0], formacoes: [], fator: 1 };
+      }
+      const formacoes = [];
+      // Formas: a de maior fator (empate: a primeira da lista).
+      let melhor = null;
+      FORMAS.forEach(function (forma, ref) {
+        const id = casas[forma.casas[0]];
+        if (!forma.casas.every(function (i) { return casas[i] === id; })) return;
+        const coringa = id === carta;
+        const especial = !coringa && !!ctx.especiais[id];
+        const fator = coringa ? f.formaCoringa : (especial ? f.forma.especial : f.forma.comum);
+        if (!melhor || fator > melhor.fator) {
+          melhor = { tipo: coringa ? 'formaCoringa' : 'forma', simbolo: id, fator: fator, casas: forma.casas.slice(),
+            ref: ref, especial: especial, desenho: forma.desenho };
+        }
+      });
+      if (melhor) formacoes.push(melhor);
+      // Linhas de pagamento que não estão inteiras dentro da forma contada.
+      LINHAS.forEach(function (linha, ref) {
+        if (melhor && linha.every(function (i) { return melhor.casas.indexOf(i) >= 0; })) return;
+        const ids = linha.map(function (i) { return casas[i]; });
+        const outros = ids.filter(function (id) { return id !== carta; });
+        const coringas = 3 - outros.length;
+        if (coringas === 3) {
+          formacoes.push({ tipo: 'linhaCoringa', simbolo: carta, fator: f.linhaCoringa, casas: linha.slice(), ref: ref, especial: false });
+        } else if (outros.every(function (id) { return id === outros[0]; })) {
+          const especial = !!ctx.especiais[outros[0]];
+          if (coringas === 0) {
+            formacoes.push({ tipo: 'linha', simbolo: outros[0], fator: especial ? f.linha.especial : f.linha.comum,
+              casas: linha.slice(), ref: ref, especial: especial });
+          } else {
+            formacoes.push({ tipo: 'linhaMista', simbolo: outros[0], fator: f.linhaMista, casas: linha.slice(), ref: ref,
+              especial: especial, coringas: coringas });
+          }
+        }
+      });
+      const fator = formacoes.reduce(function (produto, formacao) { return produto * formacao.fator; }, 1);
+      return { parada: null, simbolo: null, formacoes: formacoes, fator: fator };
+    }
+
+    return { avaliar: avaliar, contexto: contexto, LINHAS: LINHAS, FORMAS: FORMAS, casasDe: casasDe };
+  })();
+
+  /* ---------- 5.3.1 MOTOR DE SORTEIO (com o Compositor de Tabuleiro) ----------
+     Não toca no DOM. Recebe a configuração preparada e uma fonte de aleatoriedade (função que devolve um
+     número em [0, 1)) e devolve o Resultado inteiro de uma vez, sorteado no toque:
+     { giro, etapa (= giro), parada, tipo, multiplicador, acumulado, infinito, noTeto, simbolo, faixa,
+       titulo, mensagem, chave, velocidade, duracaoMs, roteiro: [giro 1 … giro N] }
+     - parada: 'quebra' (um giro sem combinação), 'telaCheia' ou 'suprema'. tipo: 'perdeu' na quebra e
+       'ganhou' nas outras duas (a encenação de hoje). multiplicador: o final (Infinity na suprema);
+       acumulado: o produto até o giro anterior à parada; noTeto: bateu o teto (selo MAX);
+       simbolo: o id do ícone da tela cheia; faixa: a faixa que escolheu título e mensagem.
+     duracaoMs = do toque até o resultado ficar visível (soma dos giros).
+     Cada passo do Roteiro: { giro, etapa (= giro), final, parada (só no último), tabuleiro, formacoes, fator,
+       multiplicador (acumulado DEPOIS do giro; Infinity no último giro da suprema), noTeto, intensidade,
+       quase, simboloQuase, moldeSeguro, suspense, duracaoMs, paradasMs, revelacaoMs }:
+     - tabuleiro[rolo][linha] = id do símbolo (3 rolos × 3 linhas) mostrado quando os rolos param;
+     - formacoes: as do Avaliador sobre esse tabuleiro (vazio na quebra, na tela cheia e na suprema);
+     - duracaoMs: duração do giro (no último, até o resultado aparecer);
+     - paradasMs: [rolo 1, rolo 2, rolo 3] = quando cada rolo para, contado do começo do giro;
+     - revelacaoMs: quando o giro é anunciado (na parada do último rolo);
+     - suspense: true no último giro (o último rolo gira mais lento, o "quase");
+     - quase: na quebra, dois ícones iguais numa linha e o terceiro rolo parando com outro símbolo.
      Os tempos já vêm divididos pela velocidade do CONFIG.
 
-     CONTRATO DA ORDEM DOS SORTEIOS (a cópia de verificação depende dele):
-     - o 1º número consumido por Motor.sortear decide o Resultado: escolherDesfecho()
-       percorre tabelaDeDesfechos() na ordem (etapa 1 ganhou, etapa 1 perdeu, etapa 2 ganhou…)
-       e para no primeiro desfecho cuja probabilidade acumulada passa do número;
-     - os números seguintes escolhem a mensagem (se for lista: 1 número, entre as variações
-       que não são a última exibida daquele resultado) e os tabuleiros do Roteiro.
+     CONTRATO DA ORDEM DOS SORTEIOS (a cópia de verificação depende dele). Motor.sortear = montar(planejar()):
+     - planejar(): o 1º número consumido decide ONDE e COMO a rodada para: escolherParada() percorre
+       tabelaDeParadas() na ordem (giro 1 quebra, giro 2 quebra, giro 2 telaCheia, giro 2 suprema, giro 3 …)
+       e para na primeira parada cuja probabilidade acumulada passa do número. Em seguida, para cada giro antes
+       da parada, as Formações (1 número para 1 ou 2 formações; para cada uma: o tipo, o ícone e, na linha
+       mista, quantos Coringas); por fim, na tela cheia, o ícone que enche o tabuleiro;
+     - montar(): o Compositor monta cada Tabuleiro (os números seguintes) e, no fim, 1 número escolhe a
+       mensagem (se for lista, entre as que não são a última exibida daquela faixa).
      Ao mudar o motor, mantenha esse contrato. */
   const Motor = (function () {
     const tabelas = new WeakMap(); // tabela normalizada por configuração (calculada uma vez)
 
-    // Tabela plana: um desfecho para cada (etapa, tipo), com a probabilidade normalizada (0 a 1).
-    // As chances são pesos relativos: probabilidade = chance ÷ soma de todas as chances.
+    // Tabela plana: uma linha para cada (giro, parada) que pode acontecer, com a probabilidade normalizada
+    // (0 a 1). No giro 1 só a quebra existe. As chances são pesos relativos: probabilidade = chance ÷ soma.
     // Peso inválido conta como 0; chance 0 nunca é sorteada; tudo 0 → sorteio uniforme (com aviso).
-    function tabelaDeDesfechos(config) {
+    function tabelaDeParadas(config) {
       if (tabelas.has(config)) return tabelas.get(config);
       const linhas = [];
-      config.etapas.forEach(function (etapa, i) {
-        ['ganhou', 'perdeu'].forEach(function (tipo) {
-          const peso = etapa[tipo].chance;
-          linhas.push({ etapa: i + 1, multiplicador: etapa.multiplicador, tipo: tipo,
-            peso: typeof peso === 'number' && Number.isFinite(peso) && peso > 0 ? peso : 0 });
+      config.giros.forEach(function (giro, i) {
+        ['quebra', 'telaCheia', 'suprema'].forEach(function (parada) {
+          if (i === 0 && parada !== 'quebra') return;
+          const peso = giro[parada];
+          linhas.push({ giro: i + 1, parada: parada, peso: typeof peso === 'number' && Number.isFinite(peso) && peso > 0 ? peso : 0 });
         });
       });
       let soma = linhas.reduce(function (total, l) { return total + l.peso; }, 0);
       if (!(soma > 0) || !Number.isFinite(soma)) {
-        avisar('Todas as chances estão zeradas ou inválidas: usando sorteio uniforme entre os ' + linhas.length + ' desfechos.');
+        avisar('Todas as chances estão zeradas ou inválidas: usando sorteio uniforme entre as ' + linhas.length + ' paradas.');
         linhas.forEach(function (l) { l.peso = 1; });
         soma = linhas.length;
       } else if (Math.abs(soma - 100) > 0.001) {
@@ -2851,22 +3256,22 @@ window.CONFIG = {
       return linhas;
     }
 
-    function escolherDesfecho(tabela, numero) {
+    function escolherParada(tabela, numero) {
       let acumulado = 0;
       for (let i = 0; i < tabela.length; i++) {
         acumulado += tabela[i].probabilidade;
         if (tabela[i].probabilidade > 0 && numero < acumulado) return tabela[i];
       }
-      // Arredondamento de ponto flutuante: fica com o último desfecho possível.
+      // Arredondamento de ponto flutuante: fica com a última parada possível.
       for (let i = tabela.length - 1; i >= 0; i--) if (tabela[i].probabilidade > 0) return tabela[i];
       return tabela[tabela.length - 1];
     }
 
-    // Última mensagem de cada resultado, por configuração, só em memória (nada persiste entre aberturas).
+    // Última mensagem de cada faixa, por configuração, só em memória (nada persiste entre aberturas).
     // Toda rodada sorteada é encenada até o fim, então a última sorteada é a última exibida.
     const ultimasMensagens = new WeakMap();
 
-    // Lista de variações: sorteia uma entre as que NÃO são a última exibida daquele resultado
+    // Lista de variações: sorteia uma entre as que NÃO são a última exibida daquela faixa
     // (a fila nunca vê a mesma piada duas vezes seguidas). Consome 1 número quando há lista.
     function escolherMensagem(config, chave, mensagens, aleatorio) {
       if (mensagens.length === 1) return mensagens[0];
@@ -2882,10 +3287,33 @@ window.CONFIG = {
       return escolhida;
     }
 
-    function intensidadeDe(config, etapa) {
-      if (etapa.intensidade) return etapa.intensidade;
+    // A faixa do multiplicador final: a última que começa em "de" menor ou igual a ele.
+    function faixaDe(config, multiplicador) {
+      let faixa = config.faixas[0];
+      config.faixas.forEach(function (f) { if (multiplicador >= f.de) faixa = f; });
+      return faixa;
+    }
+
+    // Título, faixa e mensagem de uma parada. A tela cheia usa o banco da faixa do multiplicador final, com o
+    // título do ícone; a suprema tem título e banco próprios.
+    function textosDaParada(config, parada, multiplicador, simboloId, aleatorio) {
+      if (parada === 'suprema') {
+        return { faixa: 'suprema', titulo: config.suprema.titulo,
+          mensagem: escolherMensagem(config, 'suprema', config.suprema.mensagens, aleatorio) };
+      }
+      const faixa = faixaDe(config, multiplicador);
+      let titulo = faixa.titulo;
+      if (parada === 'telaCheia') {
+        const simbolo = config.simbolos.filter(function (s) { return s.id === simboloId; })[0];
+        titulo = config.telaCheia.titulo.split('{simbolo}').join(simbolo ? simbolo.nome : '');
+      }
+      return { faixa: faixa.id, titulo: titulo, mensagem: escolherMensagem(config, faixa.id, faixa.mensagens, aleatorio) };
+    }
+
+    // Intensidade pelo Multiplicador acumulado (as fronteiras vêm da configuração; o jackpot é só da suprema).
+    function intensidadeDe(config, acumulado) {
       let id = config.intensidades[0].id;
-      config.intensidades.forEach(function (faixa) { if (etapa.multiplicador >= faixa.aPartirDe) id = faixa.id; });
+      config.intensidades.forEach(function (faixa) { if (acumulado >= faixa.aPartirDe) id = faixa.id; });
       return id;
     }
 
@@ -2896,57 +3324,240 @@ window.CONFIG = {
       }
       return lista;
     }
+    function sortearDe(lista, aleatorio) { return lista[Math.floor(aleatorio() * lista.length) % lista.length]; }
     function idDaCarta(config) { return config.simbolos.filter(function (s) { return s.carta; })[0].id; }
-    function idsComuns(config) { return config.simbolos.filter(function (s) { return !s.carta; }).map(function (s) { return s.id; }); }
+    // Os ícones que não são a Carta (os 14 do jogo, todos com a mesma chance).
+    function idsSemCoringa(config) { return config.simbolos.filter(function (s) { return !s.carta; }).map(function (s) { return s.id; }); }
 
-    // Tabuleiro cosmético: "cartas" posições sorteadas recebem a Carta LA; as outras, símbolos comuns.
-    function montarTabuleiro(config, cartas, aleatorio) {
-      const carta = idDaCarta(config);
-      const comuns = idsComuns(config);
-      const posicoes = embaralhar([0, 1, 2, 3, 4, 5, 6, 7, 8], aleatorio);
-      const plano = new Array(9);
-      posicoes.forEach(function (pos, ordem) {
-        plano[pos] = ordem < cartas ? carta : comuns[Math.floor(aleatorio() * comuns.length) % comuns.length];
-      });
-      return [plano.slice(0, 3), plano.slice(3, 6), plano.slice(6, 9)];
-    }
+    /* ----- Planejamento das Formações de cada giro ----- */
+    function ehForma(tipo) { return tipo === 'forma' || tipo === 'formaCoringa'; }
+    function ehCoringa(tipo) { return tipo === 'linhaCoringa' || tipo === 'formaCoringa'; }
 
-    // Tabuleiro do "quase" (derrota): os rolos 1 e 2 cheios de Carta e o último com só 1 ou 2 Cartas.
-    // Quase completa, mas nunca enche o tabuleiro.
-    function montarTabuleiroQuase(config, aleatorio) {
-      const carta = idDaCarta(config);
-      const comuns = idsComuns(config);
-      const noUltimo = aleatorio() < 0.5 ? 1 : 2;
-      const linhas = embaralhar([0, 1, 2], aleatorio);
-      const ultimo = [0, 0, 0];
-      linhas.forEach(function (linha, ordem) {
-        ultimo[linha] = ordem < noUltimo ? carta : comuns[Math.floor(aleatorio() * comuns.length) % comuns.length];
-      });
-      return [[carta, carta, carta], [carta, carta, carta], ultimo];
-    }
-
-    // Cartas das etapas intermediárias: aumentam aos poucos com o avanço da rodada (de 1 até 6), nunca
-    // diminuem e nunca completam o tabuleiro. A última etapa: vitória = 9 Cartas; derrota = o "quase"
-    // (7 ou 8 Cartas, sempre mais que as etapas anteriores).
-    const CARTAS_ATE = 6;
-    function cartasIntermediarias(total, aleatorio) {
-      const lista = [];
-      let anterior = 1;
-      for (let i = 1; i < total; i++) {
-        const base = 1 + Math.floor((CARTAS_ATE - 1) * (i - 1) / Math.max(1, total - 1));
-        const extra = aleatorio() < 0.35 ? 1 : 0;
-        anterior = Math.max(anterior, Math.min(CARTAS_ATE, base + extra));
-        lista.push(anterior);
+    function sortearTipo(config, aleatorio, aceitos) {
+      const tipos = TIPOS_DE_FORMACAO.filter(function (t) { return !aceitos || aceitos.indexOf(t) >= 0; });
+      let soma = tipos.reduce(function (s, t) { return s + config.formacoes[t].peso; }, 0);
+      if (!(soma > 0)) return sortearDe(tipos, aleatorio);
+      let ponto = aleatorio() * soma;
+      for (let i = 0; i < tipos.length; i++) {
+        ponto -= config.formacoes[tipos[i]].peso;
+        if (config.formacoes[tipos[i]].peso > 0 && ponto < 0) return tipos[i];
       }
+      for (let i = tipos.length - 1; i >= 0; i--) if (config.formacoes[tipos[i]].peso > 0) return tipos[i];
+      return tipos[tipos.length - 1];
+    }
+
+    // Completa uma formação planejada: ícone (entre os 14), Coringas da linha mista. Campos já escritos ficam.
+    function completarFormacao(config, spec, aleatorio) {
+      const pronta = Object.assign({}, spec);
+      if (ehCoringa(pronta.tipo)) pronta.simbolo = idDaCarta(config);
+      else if (!pronta.simbolo) pronta.simbolo = sortearDe(idsSemCoringa(config), aleatorio);
+      if (pronta.tipo === 'linhaMista' && !(pronta.coringas >= 1)) pronta.coringas = aleatorio() < 0.5 ? 1 : 2;
+      return pronta;
+    }
+
+    // Duas formações no mesmo giro só existem quando cabem no tabuleiro sem criar uma terceira: uma Forma
+    // divide casas com qualquer linha, então só convive com linha do mesmo ícone (ou com a linha mista, e
+    // a forma de Coringa só com linha de Coringa ou mista). Nunca duas formas.
+    function compativeis(a, b) {
+      if (ehForma(a.tipo) && ehForma(b.tipo)) return false;
+      if (!ehForma(a.tipo) && !ehForma(b.tipo)) return true;
+      const forma = ehForma(a.tipo) ? a : b;
+      const linha = forma === a ? b : a;
+      if (forma.tipo === 'formaCoringa') return linha.tipo === 'linhaCoringa' || linha.tipo === 'linhaMista';
+      return (linha.tipo === 'linha' || linha.tipo === 'linhaMista') && linha.simbolo === forma.simbolo;
+    }
+
+    function sortearFormacoesDoGiro(config, aleatorio) {
+      const primeira = completarFormacao(config, { tipo: sortearTipo(config, aleatorio) }, aleatorio);
+      if (!(aleatorio() * 100 < config.formacoes.giroDuplo)) return [primeira];
+      for (let tentativa = 0; tentativa < 40; tentativa++) {
+        const segunda = completarFormacao(config, { tipo: sortearTipo(config, aleatorio) }, aleatorio);
+        if (compativeis(primeira, segunda)) return [primeira, segunda];
+      }
+      return [primeira];
+    }
+
+    /* Plano da rodada inteira: onde ela para e as Formações de cada giro antes da parada. */
+    function planejar(config, aleatorio) {
+      const linha = escolherParada(tabelaDeParadas(config), aleatorio()); // 1º número
+      const formacoes = [];
+      for (let g = 1; g < linha.giro; g++) formacoes.push(sortearFormacoesDoGiro(config, aleatorio));
+      const simbolo = linha.parada === 'telaCheia' ? sortearDe(idsSemCoringa(config), aleatorio) : null;
+      return { giro: linha.giro, parada: linha.parada, formacoes: formacoes, simbolo: simbolo };
+    }
+
+    /* ----- Compositor de Tabuleiro -----
+       Monta o Tabuleiro de um giro para ter exatamente as Formações do plano e confere com o Avaliador:
+       nada a mais nem a menos, a quebra sem formação, tela cheia só nas paradas. Casas livres: os 14 ícones
+       e o Coringa (peso de 1 símbolo) com a mesma chance. Nenhuma coluna com 3 ícones iguais fora das
+       formações. Se a montagem falhar, tenta outros encaixes e, por fim, um molde seguro (casas livres todas
+       diferentes), sem travar. */
+    function tabuleiroDeCasas(casas) {
+      return [0, 1, 2].map(function (rolo) { return [0, 1, 2].map(function (linha) { return casas[linha * 3 + rolo]; }); });
+    }
+    function chaveDeFormacao(f) { return f.tipo + '|' + f.simbolo; }
+
+    function confere(avaliacao, specs, casasDasFormacoes, tabuleiro) {
+      if (avaliacao.parada) return false;
+      if (avaliacao.formacoes.length !== specs.length) return false;
+      const a = avaliacao.formacoes.map(chaveDeFormacao).sort().join(',');
+      const b = specs.map(chaveDeFormacao).sort().join(',');
+      if (a !== b) return false;
+      // Sem coluna de 3 iguais fora das formações.
+      for (let rolo = 0; rolo < 3; rolo++) {
+        const coluna = tabuleiro[rolo];
+        if (coluna[0] === coluna[1] && coluna[1] === coluna[2]) {
+          const dentro = [0, 1, 2].every(function (linha) { return casasDasFormacoes.indexOf(linha * 3 + rolo) >= 0; });
+          if (!dentro) return false;
+        }
+      }
+      return true;
+    }
+
+    function refsDe(spec) {
+      if (spec.ref !== undefined) return [spec.ref];
+      const total = ehForma(spec.tipo) ? Avaliador.FORMAS.length : Avaliador.LINHAS.length;
+      const lista = [];
+      for (let i = 0; i < total; i++) lista.push(i);
       return lista;
     }
 
+    // Escreve uma formação nas casas; false se bater com outra já escrita.
+    function colocar(casas, spec, ref, carta, aleatorio) {
+      const celulas = ehForma(spec.tipo) ? Avaliador.FORMAS[ref].casas : Avaliador.LINHAS[ref];
+      const valores = celulas.map(function () { return spec.simbolo; });
+      if (spec.tipo === 'linhaMista') {
+        embaralhar([0, 1, 2], aleatorio).slice(0, spec.coringas).forEach(function (p) { valores[p] = carta; });
+      }
+      for (let i = 0; i < celulas.length; i++) {
+        if (casas[celulas[i]] !== undefined && casas[celulas[i]] !== valores[i]) return false;
+      }
+      for (let i = 0; i < celulas.length; i++) casas[celulas[i]] = valores[i];
+      return true;
+    }
+
+    // Encaixes possíveis das formações do plano (cada um é uma lista de refs), em ordem aleatória.
+    function encaixes(specs, aleatorio) {
+      let lista = [[]];
+      specs.forEach(function (spec) {
+        const novo = [];
+        lista.forEach(function (parcial) { refsDe(spec).forEach(function (ref) { novo.push(parcial.concat([ref])); }); });
+        lista = novo;
+      });
+      return embaralhar(lista, aleatorio);
+    }
+
+    // Preenche as casas livres. Comum: sorteio entre todos os símbolos. Molde seguro: ícones todos
+    // diferentes entre si e diferentes dos das formações, sem Coringa (não cria formação nova).
+    function preencher(config, casas, aleatorio, seguro) {
+      if (!seguro) {
+        const todos = config.simbolos.map(function (s) { return s.id; });
+        for (let i = 0; i < 9; i++) if (casas[i] === undefined) casas[i] = sortearDe(todos, aleatorio);
+        return;
+      }
+      const usados = casas.filter(function (id) { return id !== undefined; });
+      const livres = embaralhar(idsSemCoringa(config).filter(function (id) { return usados.indexOf(id) < 0; }), aleatorio);
+      let k = 0;
+      for (let i = 0; i < 9; i++) {
+        if (casas[i] === undefined) {
+          casas[i] = livres.length ? livres[k % livres.length] : sortearDe(idsSemCoringa(config), aleatorio);
+          k++;
+        }
+      }
+    }
+
+    function comporCombo(config, ctx, specs, aleatorio, seguro) {
+      const carta = idDaCarta(config);
+      const combinacoes = encaixes(specs, aleatorio);
+      let tentativas = 0;
+      for (let c = 0; c < combinacoes.length; c++) {
+        for (let t = 0; t < (seguro ? 2 : 4); t++) {
+          tentativas++;
+          const casas = new Array(9);
+          let cabe = true;
+          for (let i = 0; i < specs.length && cabe; i++) cabe = colocar(casas, specs[i], combinacoes[c][i], carta, aleatorio);
+          if (!cabe) break;
+          const usadas = casas.map(function (id, i) { return id === undefined ? -1 : i; }).filter(function (i) { return i >= 0; });
+          preencher(config, casas, aleatorio, seguro);
+          const tabuleiro = tabuleiroDeCasas(casas);
+          const avaliacao = Avaliador.avaliar(tabuleiro, ctx);
+          if (confere(avaliacao, specs, usadas, tabuleiro)) {
+            return { tabuleiro: tabuleiro, avaliacao: avaliacao, tentativas: tentativas, moldeSeguro: !!seguro };
+          }
+        }
+      }
+      return null;
+    }
+
+    // Quebra: sem nenhuma formação. O "quase": dois ícones iguais (ou um ícone e o Coringa) nos rolos 1 e 2 de
+    // uma linha de pagamento e, no rolo 3, outro símbolo (que não é a Carta).
+    function comporQuebra(config, ctx, aleatorio, seguro) {
+      const carta = idDaCarta(config);
+      const sem = idsSemCoringa(config);
+      for (let t = 0; t < (seguro ? 12 : 30); t++) {
+        const casas = new Array(9);
+        const linha = Avaliador.LINHAS[Math.floor(aleatorio() * Avaliador.LINHAS.length) % Avaliador.LINHAS.length];
+        const porRolo = linha.slice().sort(function (a, b) { return (a % 3) - (b % 3); });
+        const par = sortearDe(sem, aleatorio);
+        const comCoringa = aleatorio() < 0.25;
+        const coringaNoPrimeiro = aleatorio() < 0.5;
+        casas[porRolo[0]] = comCoringa && coringaNoPrimeiro ? carta : par;
+        casas[porRolo[1]] = comCoringa && !coringaNoPrimeiro ? carta : par;
+        casas[porRolo[2]] = sortearDe(sem.filter(function (id) { return id !== par; }), aleatorio);
+        preencher(config, casas, aleatorio, seguro);
+        const tabuleiro = tabuleiroDeCasas(casas);
+        const avaliacao = Avaliador.avaliar(tabuleiro, ctx);
+        if (confere(avaliacao, [], [], tabuleiro)) {
+          return { tabuleiro: tabuleiro, avaliacao: avaliacao, quase: true, simboloQuase: par, tentativas: t + 1, moldeSeguro: !!seguro };
+        }
+      }
+      // Sem o "quase": só garante a quebra (ícones todos diferentes sempre servem).
+      for (let t = 0; t < 12; t++) {
+        const casas = new Array(9);
+        preencher(config, casas, aleatorio, true);
+        const tabuleiro = tabuleiroDeCasas(casas);
+        const avaliacao = Avaliador.avaliar(tabuleiro, ctx);
+        if (confere(avaliacao, [], [], tabuleiro)) {
+          return { tabuleiro: tabuleiro, avaliacao: avaliacao, quase: false, simboloQuase: null, tentativas: 42 + t, moldeSeguro: true };
+        }
+      }
+      return null;
+    }
+
+    // alvo: { tipo: 'combo' | 'quebra' | 'telaCheia' | 'suprema', formacoes, simbolo }
+    function compor(config, ctx, alvo, aleatorio) {
+      let r = null;
+      if (alvo.tipo === 'telaCheia' || alvo.tipo === 'suprema') {
+        const id = alvo.tipo === 'suprema' ? idDaCarta(config) : alvo.simbolo;
+        const tabuleiro = tabuleiroDeCasas([id, id, id, id, id, id, id, id, id]);
+        return { tabuleiro: tabuleiro, avaliacao: Avaliador.avaliar(tabuleiro, ctx), quase: false, simboloQuase: null, tentativas: 1, moldeSeguro: false };
+      }
+      if (alvo.tipo === 'quebra') {
+        r = comporQuebra(config, ctx, aleatorio, false) || comporQuebra(config, ctx, aleatorio, true);
+      } else {
+        r = comporCombo(config, ctx, alvo.formacoes, aleatorio, false) || comporCombo(config, ctx, alvo.formacoes, aleatorio, true);
+        // Último recurso (plano impossível, só com configuração fora do comum): uma formação só.
+        if (!r && alvo.formacoes.length > 1) {
+          for (let i = 0; i < alvo.formacoes.length && !r; i++) r = comporCombo(config, ctx, [alvo.formacoes[i]], aleatorio, true);
+        }
+      }
+      if (!r) {
+        // Configuração degenerada (poucos símbolos): aceita um tabuleiro qualquer, sem travar.
+        const casas = new Array(9);
+        preencher(config, casas, aleatorio, false);
+        const tabuleiro = tabuleiroDeCasas(casas);
+        avisar('Não foi possível montar o tabuleiro do giro com a configuração atual (poucos símbolos?): usando um tabuleiro qualquer.');
+        r = { tabuleiro: tabuleiro, avaliacao: Avaliador.avaliar(tabuleiro, ctx), quase: false, simboloQuase: null, tentativas: 99, moldeSeguro: true };
+      }
+      return r;
+    }
+
     // Ritmo (com velocidade 1; no Roteiro tudo é dividido pela velocidade):
-    // - etapa intermediária i: dura primeiraEtapaMs × 0,88^(i−1), até o mínimo etapaMaisCurtaMs. Numa etapa
-    //   de duração d, os rolos param em 50%, 64% e 78% de d (esquerda → direita) e a etapa é revelada na
+    // - giro i antes da parada: dura primeiraEtapaMs × 0,88^(i−1), até o mínimo etapaMaisCurtaMs. Num giro
+    //   de duração d, os rolos param em 50%, 64% e 78% de d (esquerda → direita) e o giro é revelado na
     //   parada do último; o resto de d é o tabuleiro parado antes do próximo giro;
-    // - etapa do desfecho (a última): giro mais longo (rolos 1 e 2 param em 1,25× e 1,5625× primeiraEtapaMs)
-    //   e o último rolo leva suspenseMs a mais (o "quase"); a etapa é revelada nessa parada e o resultado
+    // - giro da parada (o último): giro mais longo (rolos 1 e 2 param em 1,25× e 1,5625× primeiraEtapaMs)
+    //   e o último rolo leva suspenseMs a mais (o "quase"); o giro é revelado nessa parada e o resultado
     //   aparece pausaAntesDoResultadoMs depois.
     const ENCURTAMENTO = 0.88;
     const PARADAS = [0.5, 0.64, 0.78];
@@ -2966,55 +3577,84 @@ window.CONFIG = {
       return { duracaoMs: em(p3 + tempos.pausaAntesDoResultadoMs), paradasMs: [em(p1), em(p2), em(p3)], revelacaoMs: em(p3), suspense: true };
     }
 
-    // Roteiro das etapas 1…N, com o ritmo e o tabuleiro de cada parada (coerente com o Resultado):
-    // as intermediárias mostram cada vez mais Cartas sem completar; a última mostra as 9 Cartas na
-    // vitória e o "quase" na derrota. Um tabuleiro de derrota nunca fica cheio de Cartas.
-    function montarRoteiro(config, desfecho, aleatorio) {
-      const passos = [];
-      const cartas = cartasIntermediarias(desfecho.etapa, aleatorio);
-      for (let i = 1; i <= desfecho.etapa; i++) {
-        const etapa = config.etapas[i - 1];
-        const final = i === desfecho.etapa;
-        const ritmo = ritmoDaEtapa(config.tempos, i, final);
-        let tabuleiro;
-        if (!final) tabuleiro = montarTabuleiro(config, cartas[i - 1], aleatorio);
-        else if (desfecho.tipo === 'ganhou') tabuleiro = montarTabuleiro(config, 9, aleatorio);
-        else tabuleiro = montarTabuleiroQuase(config, aleatorio);
-        passos.push({
-          etapa: i,
-          multiplicador: etapa.multiplicador,
-          intensidade: intensidadeDe(config, etapa),
+    // Monta o Resultado a partir do plano: compõe cada Tabuleiro, acumula o multiplicador (trava no teto) e
+    // escolhe título e mensagem pela faixa do multiplicador final.
+    function montar(config, plano, aleatorio) {
+      const ctx = Avaliador.contexto(config);
+      const teto = config.formacoes.teto;
+      const N = plano.giro;
+      let simbolo = plano.simbolo || null;
+      if (plano.parada === 'telaCheia' && !simbolo) simbolo = sortearDe(idsSemCoringa(config), aleatorio);
+      const roteiro = [];
+      let acumulado = 1;
+      for (let g = 1; g <= N; g++) {
+        const final = g === N;
+        let comp;
+        if (!final) {
+          let specs = (plano.formacoes[g - 1] || []).map(function (s) { return completarFormacao(config, s, aleatorio); });
+          if (!specs.length) specs = [completarFormacao(config, { tipo: sortearTipo(config, aleatorio) }, aleatorio)];
+          comp = compor(config, ctx, { tipo: 'combo', formacoes: specs }, aleatorio);
+        } else {
+          comp = compor(config, ctx, { tipo: plano.parada, simbolo: simbolo }, aleatorio);
+        }
+        const fator = final ? 1 : comp.avaliacao.fator;
+        const formacoes = final ? [] : comp.avaliacao.formacoes;
+        if (!final) acumulado = Math.min(teto, acumulado * fator);
+        const ritmo = ritmoDaEtapa(config.tempos, g, final);
+        let intensidade = intensidadeDe(config, acumulado);
+        if (final && plano.parada === 'suprema') intensidade = 'jackpot';
+        else if (final && plano.parada === 'telaCheia' && ['morno', 'quente', 'pegando-fogo'].indexOf(intensidade) >= 0) intensidade = 'lendario';
+        roteiro.push({
+          giro: g,
+          etapa: g,
           final: final,
+          parada: final ? plano.parada : null,
+          tabuleiro: comp.tabuleiro,
+          formacoes: formacoes,
+          fator: fator,
+          multiplicador: final && plano.parada === 'suprema' ? Infinity : acumulado,
+          noTeto: acumulado >= teto,
+          intensidade: intensidade,
+          quase: !!comp.quase,
+          simboloQuase: comp.simboloQuase || null,
+          moldeSeguro: !!comp.moldeSeguro,
           suspense: ritmo.suspense,
           duracaoMs: ritmo.duracaoMs,
           paradasMs: ritmo.paradasMs,
           revelacaoMs: ritmo.revelacaoMs,
-          tabuleiro: tabuleiro,
         });
       }
-      return passos;
-    }
-
-    function sortear(config, aleatorio) {
-      const desfecho = escolherDesfecho(tabelaDeDesfechos(config), aleatorio()); // 1º número
-      const bloco = config.etapas[desfecho.etapa - 1][desfecho.tipo];
-      const chave = desfecho.tipo + '-' + desfecho.etapa;
-      const mensagem = escolherMensagem(config, chave, bloco.mensagens, aleatorio);
-      const roteiro = montarRoteiro(config, desfecho, aleatorio);
+      const infinito = plano.parada === 'suprema';
+      const multiplicador = infinito ? Infinity : acumulado;
+      const textos = textosDaParada(config, plano.parada, multiplicador, simbolo, aleatorio);
       return {
-        etapa: desfecho.etapa,
-        multiplicador: desfecho.multiplicador,
-        tipo: desfecho.tipo,
-        titulo: bloco.titulo,
-        mensagem: mensagem,
-        chave: chave,
+        giro: N,
+        etapa: N,
+        parada: plano.parada,
+        tipo: plano.parada === 'quebra' ? 'perdeu' : 'ganhou',
+        multiplicador: multiplicador,
+        acumulado: acumulado,
+        infinito: infinito,
+        noTeto: acumulado >= teto,
+        simbolo: simbolo,
+        faixa: textos.faixa,
+        titulo: textos.titulo,
+        mensagem: textos.mensagem,
+        chave: textos.faixa,
         velocidade: config.tempos.velocidade,
         duracaoMs: roteiro.reduce(function (total, passo) { return total + passo.duracaoMs; }, 0),
         roteiro: roteiro,
       };
     }
 
-    return { sortear: sortear, tabelaDeDesfechos: tabelaDeDesfechos };
+    function sortear(config, aleatorio) {
+      return montar(config, planejar(config, aleatorio), aleatorio);
+    }
+
+    return {
+      sortear: sortear, planejar: planejar, montar: montar, tabelaDeParadas: tabelaDeParadas,
+      textosDaParada: textosDaParada, faixaDe: faixaDe, completarFormacao: completarFormacao,
+    };
   })();
 
   /* ---------- 5.4 FONTE DE ALEATORIEDADE ----------
@@ -3055,6 +3695,7 @@ window.CONFIG = {
         placar: $('placar'), botaoMudo: $('botao-mudo'), rotuloGirar: $('rotulo-girar'),
         textoGirar: $('texto-girar'), avisoGirarBrincadeira: $('aviso-girar-brincadeira'),
         selo: $('selo-multiplicador'), anuncio: null,
+        selosMax: Array.prototype.slice.call(document.querySelectorAll('.selo-max')),
         desenhos: [], nomes: [],
       };
       // As 9 células são criadas uma única vez e reaproveitadas em todas as rodadas. Cada uma tem um SVG
@@ -3101,6 +3742,7 @@ window.CONFIG = {
       el.textoGirar.textContent = textos.avisoGirar;
       el.avisoGirarBrincadeira.textContent = textos.avisoBrincadeira; // o aviso fica visível também com o celular deitado
       el.rotuloGanho.textContent = textos.rotuloGanho;
+      el.selosMax.forEach(function (selo) { selo.textContent = textos.seloTeto; });
       // Pílulas do placar decorativo, antes do botão de som (mudo).
       Array.prototype.slice.call(el.placar.querySelectorAll('.pilula')).forEach(function (p) { el.placar.removeChild(p); });
       textos.placar.forEach(function (texto) {
@@ -3129,6 +3771,7 @@ window.CONFIG = {
       }
       el.anunciador.appendChild(anuncio);
       el.anunciador.dataset.tom = tom;
+      delete el.anunciador.dataset.especial;
       el.anuncio = anuncio;
     }
 
@@ -3189,7 +3832,11 @@ window.CONFIG = {
     function telaInicial(config) {
       el.etapa.textContent = '';
       el.multiplicador.textContent = '—';
+      delete el.multiplicador.dataset.infinito;
+      delete el.valorGanho.dataset.infinito;
+      delete el.resultadoMultiplicador.dataset.infinito;
       delete el.jogo.dataset.etapa;
+      delete el.jogo.dataset.teto;
       delete el.jogo.dataset.intensidade;
       delete el.jogo.dataset.fase;
       anunciar(config.textos.titulo, 'titulo');
@@ -3200,19 +3847,51 @@ window.CONFIG = {
       el.resultadoTitulo.textContent = '';
       el.resultadoMensagem.textContent = '';
       delete el.painel.dataset.tipo;
+      delete el.painel.dataset.parada;
       delete el.painel.dataset.etapa;
     }
 
-    // A etapa é revelada (quando o último rolo dela para): multiplicador, "Etapa N" (leitores de tela),
-    // atributos do #jogo e o anunciador "ROUND N · Nx".
+    // O giro começa (os rolos arrancam): o anunciador mostra só "ROUND N". O nome da formação vem na revelação.
+    function iniciarGiro(passo, config) {
+      anunciar(config.textos.rotuloRound + ' ' + passo.giro, 'round');
+    }
+    // Nome de uma formação para o anunciador e para o selo ("LINHA ESPECIAL", "CORINGA EM CRUZ"), sem o fator.
+    function nomeDaFormacao(formacao, textos) {
+      if (formacao.tipo === 'linhaMista') return textos.nomeLinhaMista;
+      if (formacao.tipo === 'linhaCoringa') return textos.nomeLinhaCoringa;
+      if (formacao.tipo === 'linha') return formacao.especial ? textos.nomeLinhaEspecial : textos.nomeLinha;
+      const desenho = formacao.desenho === 'cruz' ? textos.nomeFormaCruz : (formacao.desenho === 'T' ? textos.nomeFormaT : textos.nomeFormaL);
+      if (formacao.tipo === 'formaCoringa') return textos.prefixoFormaCoringa + ' ' + desenho;
+      return formacao.especial ? desenho + ' ' + textos.sufixoEspecial : desenho;
+    }
+    // Texto do selo do fator: "LINHA x2", "CRUZ ESPECIAL x6", "CORINGA EM CRUZ x9".
+    function rotuloDaFormacao(formacao, textos) {
+      return nomeDaFormacao(formacao, textos) + ' ' + formatarMultiplicador(formacao.fator);
+    }
+
+    // O giro é revelado (quando o último rolo dele para): Multiplicador acumulado (também na barra "Ganho"),
+    // "Giro N" (leitores de tela), atributos do #jogo e o anunciador com o nome da formação (ou "ROUND N" se
+    // o giro não formou nada). Com duas formações os nomes vêm separados por "+".
     function revelarEtapa(passo, config) {
-      el.etapa.textContent = config.textos.rotuloEtapa + ' ' + passo.etapa;
-      el.multiplicador.textContent = formatarMultiplicador(passo.multiplicador);
-      el.jogo.dataset.etapa = passo.etapa;
+      el.etapa.textContent = config.textos.rotuloGiro + ' ' + passo.giro;
+      escreverMultiplicador(el.multiplicador, passo.multiplicador);
+      escreverMultiplicador(el.valorGanho, passo.multiplicador);
+      el.jogo.dataset.etapa = passo.giro;
       el.jogo.dataset.intensidade = passo.intensidade;
-      const round = config.textos.rotuloRound + ' ' + passo.etapa;
-      const mult = formatarMultiplicador(passo.multiplicador);
-      anunciar(round + ' · ' + mult, 'round', [[round, 'anuncio-round'], [' · ', 'anuncio-ponto'], [mult, 'anuncio-mult']]);
+      if (passo.noTeto) el.jogo.dataset.teto = 'sim';
+      else delete el.jogo.dataset.teto;
+      const formacoes = passo.formacoes || [];
+      if (!formacoes.length) {
+        anunciar(config.textos.rotuloRound + ' ' + passo.giro, 'round');
+        return;
+      }
+      const partes = [];
+      formacoes.forEach(function (f, k) {
+        if (k) partes.push([' + ', 'anuncio-mais']);
+        partes.push([nomeDaFormacao(f, config.textos), 'anuncio-formacao']);
+      });
+      anunciar('', 'formacao', partes);
+      if (formacoes.some(function (f) { return f.especial; })) el.anunciador.dataset.especial = 'sim';
     }
     // Fase da etapa em curso, para os efeitos (ISSUE-009): giro, suspense, revelacao, desfecho.
     function marcarFase(fase) {
@@ -3223,6 +3902,8 @@ window.CONFIG = {
     function mostrarPasso(passo, config) {
       desenharTabuleiro(passo.tabuleiro, config);
       revelarEtapa(passo, config);
+      if (passo.final) Destaque.limpar();
+      else Destaque.mostrar(passo, config, 1);
     }
     // Peças que o Diretor de Animação anima (só transform e opacity).
     function pecasDaRevelacao() {
@@ -3236,16 +3917,18 @@ window.CONFIG = {
 
     function mostrarResultado(resultado, config) {
       el.painel.dataset.tipo = resultado.tipo;
-      el.painel.dataset.etapa = resultado.etapa;
-      el.resultadoTipo.textContent = resultado.tipo === 'ganhou' ? config.textos.tipoGanhou : config.textos.tipoPerdeu;
-      el.resultadoMultiplicador.textContent = formatarMultiplicador(resultado.multiplicador);
+      el.painel.dataset.parada = resultado.parada;
+      el.painel.dataset.etapa = resultado.giro;
+      el.resultadoTipo.textContent = tipoDaParada(resultado.parada, config.textos);
+      escreverMultiplicador(el.resultadoMultiplicador, resultado.multiplicador);
       el.resultadoTitulo.textContent = resultado.titulo;
       el.resultadoMensagem.textContent = resultado.mensagem;
-      // Barra "Ganho" (valor final; a contagem animada é da revelação, 5.7.2) e anunciador: "K.O." na derrota; palavra de vitória máxima
-      // quando ganha na última etapa; nas outras vitórias o "ROUND N" continua.
-      el.valorGanho.textContent = formatarMultiplicador(resultado.tipo === 'ganhou' ? resultado.multiplicador : 0);
-      if (resultado.tipo === 'perdeu') anunciar(config.textos.palavraDerrota, 'ko');
-      else if (resultado.etapa === config.etapas.length) anunciar(config.textos.palavraVitoriaMaxima, 'maxima');
+      // Barra "Ganho" (o multiplicador final; a contagem animada é da revelação, 5.7.2) e anunciador: "K.O." na
+      // quebra, "TELA CHEIA!" na tela cheia e "PERFECT!" na Curinga total.
+      escreverMultiplicador(el.valorGanho, resultado.multiplicador);
+      if (resultado.parada === 'quebra') anunciar(config.textos.palavraDerrota, 'ko');
+      else if (resultado.parada === 'telaCheia') anunciar(config.textos.palavraTelaCheia, 'maxima');
+      else anunciar(config.textos.palavraVitoriaMaxima, 'maxima');
     }
 
     function mostrarEstado(estado, textos) {
@@ -3262,7 +3945,8 @@ window.CONFIG = {
 
     return {
       pegarElementos: pegarElementos, aplicarTextos: aplicarTextos, telaInicial: telaInicial,
-      mostrarPasso: mostrarPasso, revelarEtapa: revelarEtapa, marcarFase: marcarFase, desenharColuna: desenharColuna,
+      mostrarPasso: mostrarPasso, revelarEtapa: revelarEtapa, iniciarGiro: iniciarGiro, rotuloDaFormacao: rotuloDaFormacao,
+      marcarFase: marcarFase, desenharColuna: desenharColuna,
       tabuleiroAtual: tabuleiroAtual, pecasDaRevelacao: pecasDaRevelacao,
       mostrarResultado: mostrarResultado, mostrarEstado: mostrarEstado, redesenharSimbolos: redesenharSimbolos,
     };
@@ -3607,6 +4291,9 @@ window.CONFIG = {
     // D+1…D+3 = o que está na tela agora (tabuleiro anterior); D+4 = logo abaixo. A fita começa mostrando
     // D+1…D+3 e desce D símbolos até mostrar 1…3.
     function prepararEtapa(passo, anterior, planos) {
+      Destaque.sair(velocidade); // o destaque do giro anterior some; o anunciador volta para "ROUND N"
+      Tela.iniciarGiro(passo, config);
+      entrarAnuncio();
       const porId = {};
       config.simbolos.forEach(function (s) { porId[s.id] = s; });
       const carta = config.simbolos.filter(function (s) { return s.carta; })[0];
@@ -3629,10 +4316,10 @@ window.CONFIG = {
         }
         fita[0] = comum(fita[1]);
         fita[d + 4] = comum(fita[d + 3]);
-        if (quase && passo.tabuleiro[2].some(function (id) { return id !== carta.id; })) {
-          // Derrota: a Carta que faltava passa logo antes da parada e outra fica logo acima ("quase!").
-          fita[4] = carta;
-          fita[0] = carta;
+        if (quase && passo.quase && porId[passo.simboloQuase]) {
+          // Quebra com "quase": o ícone que faltava passa logo antes da parada e outro fica logo acima.
+          fita[4] = porId[passo.simboloQuase];
+          fita[0] = porId[passo.simboloQuase];
         }
         // Nunca 3 Cartas seguidas fora do alvo (1…3) e do tabuleiro anterior (D+1…D+3): assim, nem de
         // passagem, um rolo mostra uma coluna cheia de Cartas que não é a de verdade (uma derrota nunca
@@ -3689,11 +4376,30 @@ window.CONFIG = {
       });
     }
 
+    // O anunciador entra a cada giro novo ("ROUND N") e a cada nome de formação (fade com "reduzir movimento").
+    function entrarAnuncio() {
+      const anuncio = Tela.pecasDaRevelacao().anuncio;
+      if (!anuncio) return;
+      const g = window.gsap;
+      const escala = 1 / velocidade;
+      if (Efeitos.reduzido()) g.fromTo(anuncio, { opacity: 0 }, { opacity: 1, duration: 0.15 * escala });
+      else g.fromTo(anuncio, { scale: 0.55, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.25 * escala, ease: 'back.out(2)' });
+    }
+
     // Revelação da etapa: o selo do multiplicador explode (pulo + anel + faíscas) e o anunciador entra.
     function revelar(passo) {
       Tela.revelarEtapa(passo, config);
       Tela.marcarFase(passo.final ? 'desfecho' : 'revelacao');
-      if (!passo.final) Som.etapa(passo, velocidade); // na última etapa quem toca é a fanfarra ou o "K.O."
+      if (!passo.final) { // na última etapa quem toca é a fanfarra ou o "K.O."
+        Som.etapa(passo, velocidade);
+        Som.formacao(passo, velocidade);
+      }
+      try {
+        if (passo.final) Destaque.limpar();
+        else Destaque.mostrar(passo, config, velocidade); // casas acesas, traços, contornos e selos do fator
+      } catch (erro) {
+        console.error('[Tigrinho] Falha no destaque das formações (seguindo sem ele):', erro);
+      }
       try {
         Efeitos.etapa(passo, { velocidade: velocidade, tipo: tipoAtual }); // efeitos da faixa (5.7.3)
       } catch (erro) {
@@ -3715,7 +4421,10 @@ window.CONFIG = {
         y: function (i) { return Math.sin(i * passoAngulo + 0.4) * raio * 0.8; },
         scale: 0.3, opacity: 0, duration: 0.55 * escala, ease: 'power3.out',
       });
-      if (p.anuncio) g.fromTo(p.anuncio, { scale: 0.55, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3 * escala, ease: 'back.out(2)' });
+      if (p.anuncio) {
+        if (Efeitos.reduzido()) g.fromTo(p.anuncio, { opacity: 0 }, { opacity: 1, duration: 0.15 * escala });
+        else g.fromTo(p.anuncio, { scale: 0.55, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3 * escala, ease: 'back.out(2)' });
+      }
     }
 
     function suspenseDosEfeitos(passo, duracao) {
@@ -3842,6 +4551,7 @@ window.CONFIG = {
       }
       if (!disponivel()) return;
       encerrarEnsaio();
+      Destaque.limpar();
       const g = window.gsap;
       const pecas = pecasAnimadas();
       matarAnimacoesDasPecas(Tela.pecasDaRevelacao());
@@ -3857,7 +4567,185 @@ window.CONFIG = {
     return { preparar: preparar, disponivel: disponivel, aquecer: aquecer, encenar: encenar, recolher: recolher, parar: parar };
   })();
 
-  /* ---------- 5.7.1 FESTA (confete e chuva de moedas, proporcionais ao multiplicador) ----------
+  /* ---------- 5.7.0 DESTAQUE DAS FORMAÇÕES (casas acesas, traços, contornos e selos do fator) ----------
+     Só lê o Roteiro: não avalia tabuleiro nem sorteia. Na revelação de um giro com combinação (Diretor.revelar),
+     mostrar() acende exatamente as casas de cada formação do passo:
+       linha (comum, mista ou de Coringa) .... as 3 casas e o traço da linha (3 horizontais e 2 diagonais);
+       forma (L, T, cruz, comum, especial ou de Coringa) .... as 5 casas e o contorno delas (não são linhas soltas);
+     e põe o selo do fator ("LINHA x2", "CRUZ ESPECIAL x6"...). Ícone especial usa Coral. No giro duplo as duas
+     formações acendem e aparecem os dois selos.
+     Cabe na janela de revelação do giro (do fim da última parada até o início do próximo giro) e some num
+     fade rápido quando o próximo giro começa (sair). Só transform e opacity. Com "reduzir movimento" é só fade.
+     As casas acesas ficam no DOM como .casa.acesa (data-casa 0…8, linha de cima para baixo, esquerda para a direita). */
+  const Destaque = (function () {
+    const LADO = 1000;     // lado do desenho do contorno (viewBox)
+    const VAO = 23.3;      // vão entre as casas nesse desenho (vão ÷ lado útil do tabuleiro ≈ 2,33%)
+    let camada = null, selosEl = null, tracosEl = null, casas = [];
+    let vivos = [];        // peças criadas para o giro em curso (tracos, contornos, selos)
+    let ativo = false;
+
+    function gs() { return window.gsap && typeof window.gsap.timeline === 'function' ? window.gsap : null; }
+    function criar(tag, classe, pai) {
+      const e = document.createElement(tag);
+      if (classe) e.className = classe;
+      if (pai) pai.appendChild(e);
+      return e;
+    }
+
+    function preparar(tabuleiro) {
+      camada = criar('div', 'camada-destaque', tabuleiro);
+      camada.setAttribute('aria-hidden', 'true');
+      const grade = criar('div', 'destaque-casas', camada);
+      casas = [];
+      for (let rolo = 0; rolo < 3; rolo++) {
+        for (let linha = 0; linha < 3; linha++) {
+          const c = criar('i', 'casa', grade);
+          c.dataset.rolo = rolo;
+          c.dataset.linha = linha;
+          c.dataset.casa = linha * 3 + rolo;
+          casas[linha * 3 + rolo] = c;
+        }
+      }
+      tracosEl = criar('div', 'destaque-tracos', camada);
+      selosEl = criar('div', 'selos', tabuleiro);
+      selosEl.setAttribute('aria-hidden', 'true');
+    }
+
+    // Contorno do conjunto de casas: só as bordas que não encostam em outra casa do conjunto.
+    function caminhoDoContorno(lista) {
+      const w = (LADO - 2 * VAO) / 3, p = w + VAO, m = VAO / 2;
+      const n = function (v) { return Math.round(v * 10) / 10; };
+      const dentro = function (i) { return lista.indexOf(i) >= 0; };
+      let d = '';
+      lista.forEach(function (i) {
+        const col = i % 3, lin = Math.floor(i / 3);
+        const x0 = n(col * p - m), x1 = n(col * p + w + m), y0 = n(lin * p - m), y1 = n(lin * p + w + m);
+        if (lin === 0 || !dentro(i - 3)) d += 'M' + x0 + ' ' + y0 + 'L' + x1 + ' ' + y0;
+        if (lin === 2 || !dentro(i + 3)) d += 'M' + x0 + ' ' + y1 + 'L' + x1 + ' ' + y1;
+        if (col === 0 || !dentro(i - 1)) d += 'M' + x0 + ' ' + y0 + 'L' + x0 + ' ' + y1;
+        if (col === 2 || !dentro(i + 1)) d += 'M' + x1 + ' ' + y0 + 'L' + x1 + ' ' + y1;
+      });
+      return d;
+    }
+
+    // Mostra as formações do passo (Roteiro). velocidade = tempos.velocidade, para a animação acompanhar o ritmo.
+    function mostrar(passo, config, velocidade) {
+      limpar();
+      const formacoes = (passo && passo.formacoes) || [];
+      if (!camada || !formacoes.length) return;
+      ativo = true;
+      camada.dataset.formacoes = formacoes.length;
+      const g = gs();
+      const reduzido = Efeitos.reduzido();
+      const e = 1 / (velocidade || 1);
+      const janela = Math.max(0.06, ((passo.duracaoMs || 0) - (passo.revelacaoMs || 0)) / 1000); // já dividida pela velocidade
+      const d = Math.max(0.05, Math.min(0.18 * e, janela * 0.9));
+      const acesas = [], tracos = [], caminhos = [], selos = [];
+      formacoes.forEach(function (f) {
+        const especial = !!f.especial;
+        const ehForma = f.tipo === 'forma' || f.tipo === 'formaCoringa';
+        f.casas.forEach(function (i) {
+          const c = casas[i];
+          if (!c) return;
+          c.classList.add('acesa');
+          c.dataset.tipo = f.tipo;
+          if (especial) c.dataset.especial = 'sim';
+          if (ehForma) c.dataset.forma = 'sim';
+          if (acesas.indexOf(c) < 0) acesas.push(c);
+        });
+        if (ehForma) {
+          const svg = document.createElementNS(SVG_NS, 'svg');
+          svg.setAttribute('class', 'contorno');
+          svg.setAttribute('viewBox', '0 0 ' + LADO + ' ' + LADO);
+          svg.setAttribute('preserveAspectRatio', 'none');
+          svg.dataset.tipo = f.tipo;
+          svg.dataset.casas = f.casas.slice().sort(function (a, b) { return a - b; }).join(',');
+          if (especial) svg.dataset.especial = 'sim';
+          ['contorno-base', 'contorno-miolo'].forEach(function (classe) {
+            const caminho = document.createElementNS(SVG_NS, 'path');
+            caminho.setAttribute('class', classe);
+            caminho.setAttribute('d', caminhoDoContorno(f.casas));
+            svg.appendChild(caminho);
+            caminhos.push(caminho);
+          });
+          camada.appendChild(svg);
+          vivos.push(svg);
+        } else {
+          const traco = criar('i', 'traco', tracosEl);
+          const ref = f.ref;
+          traco.dataset.tipo = f.tipo;
+          traco.dataset.casas = f.casas.join(',');
+          if (especial) traco.dataset.especial = 'sim';
+          if (ref < 3) { traco.classList.add('h'); traco.style.setProperty('--r', ref); }
+          else { traco.classList.add('d', ref === 3 ? 'd1' : 'd2'); }
+          traco.dataset.angulo = ref === 3 ? 45 : (ref === 4 ? 135 : 0);
+          tracos.push(traco);
+          vivos.push(traco);
+        }
+        const selo = criar('div', 'selo', selosEl);
+        selo.dataset.tipo = f.tipo;
+        selo.dataset.fator = f.fator;
+        if (especial) selo.dataset.especial = 'sim';
+        selo.textContent = Tela.rotuloDaFormacao(f, config.textos);
+        selos.push(selo);
+        vivos.push(selo);
+      });
+      if (!g) { // sem GSAP: tudo aparece direto
+        acesas.concat(tracos, caminhos, selos).forEach(function (x) { x.style.opacity = 1; });
+        return;
+      }
+      tracos.forEach(function (t) { g.set(t, { rotation: Number(t.dataset.angulo), transformOrigin: '0% 50%' }); });
+      if (reduzido) { // só fade: nada de pulo, giro ou crescimento
+        g.fromTo(acesas.concat(tracos, caminhos, selos), { opacity: 0 }, { opacity: 1, duration: d, ease: 'power1.out' });
+        return;
+      }
+      g.fromTo(acesas, { scale: 0.78, opacity: 0 }, { scale: 1, opacity: 1, duration: d, ease: 'back.out(2)', stagger: d * 0.12 });
+      if (tracos.length) g.fromTo(tracos, { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: d, ease: 'power2.out', stagger: d * 0.25 });
+      if (caminhos.length) g.fromTo(caminhos, { opacity: 0 }, { opacity: 1, duration: d * 0.8, ease: 'power1.out' });
+      selos.forEach(function (selo, k) {
+        const giro = k % 2 ? 2.5 : -2.5;
+        g.fromTo(selo, { scale: 1.7, opacity: 0, rotation: giro * 2 }, { scale: 1, opacity: 1, rotation: giro, duration: d, ease: 'back.out(2.2)', delay: k * d * 0.35 });
+      });
+    }
+
+    // O próximo giro começou: o destaque some num fade curto (os rolos voltam a cobrir as casas).
+    function sair(velocidade) {
+      if (!camada || !ativo) return;
+      const g = gs();
+      if (!g) { limpar(); return; }
+      g.killTweensOf([camada, selosEl]);
+      g.to([camada, selosEl], { opacity: 0, duration: 0.12 / (velocidade || 1), ease: 'power1.in', onComplete: limpar });
+    }
+
+    // Apaga o destaque na hora (início de giro sem animação, fim da rodada, "Jogar de novo").
+    function limpar() {
+      if (!camada) return;
+      const g = gs();
+      if (g) {
+        g.killTweensOf([camada, selosEl]);
+        g.killTweensOf(casas);
+        g.killTweensOf(vivos);
+        g.killTweensOf(Array.prototype.slice.call(camada.querySelectorAll('path')));
+        g.set([camada, selosEl], { clearProps: 'opacity' });
+        g.set(casas, { clearProps: 'transform,opacity' });
+      }
+      casas.forEach(function (c) {
+        c.classList.remove('acesa');
+        c.removeAttribute('data-tipo');
+        c.removeAttribute('data-especial');
+        c.removeAttribute('data-forma');
+        c.style.opacity = '';
+      });
+      vivos.forEach(function (v) { if (v.parentNode) v.parentNode.removeChild(v); });
+      vivos = [];
+      camada.removeAttribute('data-formacoes');
+      ativo = false;
+    }
+
+    return { preparar: preparar, mostrar: mostrar, sair: sair, limpar: limpar };
+  })();
+
+  /* ---------- 5.7.1 FESTA (confete e chuva de moedas, proporcionais ao multiplicador, em escala logarítmica) ----------
      Duas camadas <canvas> por cima do jogo (#festa): o confete é do canvas-confetti (bloco de bibliotecas)
      e a chuva de moedas é desenhada aqui, com devicePixelRatio limitado a 2. Tudo anda por
      requestAnimationFrame (pausa com a aba oculta). A quantidade de partículas e a duração crescem com o
@@ -3893,9 +4781,8 @@ window.CONFIG = {
     function movimentoReduzido() { return Efeitos.reduzido(); }
     function fatorAparelho() { return Efeitos.fatorParticulas(); }
 
-    // Plano da festa para um multiplicador (1 a 20 com as etapas padrão; a escala vai até a última etapa).
-    function planejar(multiplicador, maximo) {
-      const f = Math.max(0, Math.min(1, (multiplicador - 1) / Math.max(1, maximo - 1)));
+    // Plano da festa para um nível f de 0 a 1 (veja nivelDaFesta em 5.7.2: escala logarítmica do multiplicador).
+    function planejar(f) {
       const k = fatorAparelho();
       return {
         rajadas: 1 + Math.round(f * 11),                       // 1 → 12 rajadas de confete
@@ -4027,12 +4914,12 @@ window.CONFIG = {
     }
 
     // Começa a festa de um multiplicador. atrasoMs: espera antes da primeira rajada.
-    function comecar(multiplicador, maximo, atrasoMs) {
+    function comecar(nivel, atrasoMs) {
       if (!camada) return;
       parar();
       medir();
       cores = coresDaFesta();
-      const plano = planejar(multiplicador, maximo);
+      const plano = planejar(Math.max(0, Math.min(1, nivel)));
       const atraso = atrasoMs || 0;
       for (let i = 0; i < plano.rajadas; i++) {
         rajadas.push({ i: i, plano: plano, ms: atraso + (plano.rajadas > 1 ? i * plano.emissaoMs / (plano.rajadas - 1) : 0) });
@@ -4110,18 +4997,21 @@ window.CONFIG = {
         tabuleiro.appendChild(d);
         return d;
       };
-      const linhas = camada('linhas-pagamento');
-      ['1', '2', '3'].forEach(function (n) {
-        const i = document.createElement('i');
-        i.className = 'linha';
-        i.dataset.linha = n;
-        linhas.appendChild(i);
-      });
+      // Tela cheia e Curinga total: as 9 casas acendem juntas (a grade é a mesma do destaque das formações).
+      const cheia = camada('tela-cheia');
+      const grade = document.createElement('div');
+      grade.className = 'destaque-casas';
+      for (let i = 0; i < 9; i++) {
+        const casa = document.createElement('i');
+        casa.className = 'casa';
+        casa.dataset.casa = i;
+        grade.appendChild(casa);
+      }
+      cheia.appendChild(grade);
       const morto = camada('morto');
       const ko = camada('ko');
       el = {
-        tabuleiro: tabuleiro, linhas: linhas, morto: morto, ko: ko,
-        tracos: Array.prototype.slice.call(linhas.querySelectorAll('.linha')),
+        tabuleiro: tabuleiro, cheia: cheia, casas: Array.prototype.slice.call(grade.querySelectorAll('.casa')), morto: morto, ko: ko,
         celulas: Array.prototype.slice.call(tabuleiro.querySelectorAll('.celula')),
         marcadores: Array.prototype.slice.call(document.querySelectorAll('#moldura-tabuleiro .marcadores span')),
         moldLogo: document.getElementById('moldura-logo'), barra: document.getElementById('barra-ganho'),
@@ -4135,7 +5025,7 @@ window.CONFIG = {
 
     function gs() { return window.gsap && typeof window.gsap.timeline === 'function' ? window.gsap : null; }
     function pecas() {
-      return [el.linhas, el.morto, el.ko, el.moldLogo, el.barra].concat(el.tracos, el.celulas, el.marcadores, el.entrada);
+      return [el.cheia, el.morto, el.ko, el.moldLogo, el.barra].concat(el.casas, el.celulas, el.marcadores, el.entrada);
     }
 
     function desfecho(resultado, cfg) {
@@ -4144,52 +5034,75 @@ window.CONFIG = {
       Diretor.recolher(); // os rolos somem; as células já mostram o tabuleiro final
       const escala = 1 / (resultado.velocidade || cfg.tempos.velocidade || 1);
       Som.desfecho(resultado, cfg, escala); // fanfarra (vitória) ou "K.O." grave (derrota), 5.7.4
-      if (resultado.tipo === 'ganhou') vitoria(resultado, cfg, escala);
-      else derrota(resultado, cfg, escala);
+      if (resultado.parada === 'quebra') derrota(resultado, cfg, escala);
+      else vitoria(resultado, cfg, escala);
       Efeitos.desfecho(resultado, cfg, escala); // jackpot: aguada Lírio/Pêssego, monograma LA e fogos (5.7.3)
     }
 
+    // Nível da festa (0 a 1): o multiplicador final em escala logarítmica até o teto; a Curinga total é o máximo
+    // e a tela cheia comemora, no mínimo, como "lendário".
+    function nivelDaFesta(resultado, cfg) {
+      if (resultado.parada === 'suprema') return 1;
+      const teto = Math.max(2, cfg.formacoes.teto);
+      const escala = function (m) { return Math.log(Math.max(1, m)) / Math.log(teto); };
+      const nivel = escala(resultado.multiplicador);
+      // O piso da tela cheia é a fronteira do "lendário" (a mesma das intensidades da configuração).
+      const lendario = cfg.intensidades.filter(function (f) { return f.id === 'lendario'; })[0];
+      return resultado.parada === 'telaCheia' ? Math.max(lendario ? escala(lendario.aPartirDe) : 0.73, nivel) : nivel;
+    }
+
+    // Barra "Ganho" validando o acumulado: realce (classe .validada) e um pulo. Na quebra com x1 não há validação.
+    function validarGanho(reduzido, e, atraso) {
+      el.barra.classList.add('validada');
+      const g = gs();
+      if (g && !reduzido) g.fromTo(el.barra, { scale: 1 }, { scale: 1.12, duration: 0.14 * e, yoyo: true, repeat: 3, ease: 'power2.out', delay: atraso });
+    }
+
+    // Tela cheia e Curinga total: as 9 casas acendem juntas, a barra "Ganho" valida o acumulado (ou mostra o x∞)
+    // e a festa começa (no mínimo lendária; na Curinga total, a do jackpot).
     function vitoria(resultado, cfg, e) {
       const g = gs();
       const reduzido = Festa.movimentoReduzido();
       el.tabuleiro.classList.add('vitoria');
-      el.linhas.classList.add('ativa');
-      const ordem = ['1', '2', '3'].map(function (n) { return el.tracos.filter(function (t) { return t.dataset.linha === n; })[0]; });
-      // Marcadores de cada linha (os dois lados), na ordem em que as linhas acendem.
-      const rotulos = ['1', '2', '3'].map(function (n) { return el.marcadores.filter(function (m) { return m.textContent.trim() === n; }); });
-      Festa.comecar(resultado.multiplicador, cfg.etapas.length, Math.round(250 * e));
+      el.cheia.classList.add('ativa');
+      el.casas.forEach(function (c) { c.classList.add('acesa'); });
+      Festa.comecar(nivelDaFesta(resultado, cfg), Math.round(250 * e));
       if (!g) {
-        ordem.forEach(function (t) { t.style.opacity = 1; });
-        el.valorGanho.textContent = formatarMultiplicador(resultado.multiplicador);
+        el.cheia.style.opacity = 1;
+        el.casas.forEach(function (c) { c.style.opacity = 1; });
+        escreverMultiplicador(el.valorGanho, resultado.multiplicador);
+        el.barra.classList.add('validada');
         return;
       }
-      // 1. As 9 Cartas tomam o tabuleiro: cada uma "pula" a partir do centro.
+      // 1. As 9 Cartas ou ícones tomam o tabuleiro: cada um "pula" a partir do centro.
       g.fromTo(el.celulas, { scale: 0.55, opacity: 0.35 }, {
         scale: 1, opacity: 1, duration: 0.42 * e, ease: reduzido ? 'power1.out' : 'back.out(2.4)',
         stagger: { each: 0.045 * e, from: 'center', grid: [3, 3] },
       });
-      // 2. As linhas de pagamento acendem (1, 2 e 3) e pulsam devagar (bem menos de 3 vezes por segundo).
-      ordem.forEach(function (traco, i) {
-        const t0 = (0.25 + i * 0.14) * e;
-        g.fromTo(traco, { scaleX: 0, opacity: 1 }, { scaleX: 1, duration: 0.3 * e, ease: 'power2.out', delay: t0 });
-        if (!reduzido) g.fromTo(rotulos[i], { scale: 1 }, { scale: 1.35, duration: 0.14 * e, yoyo: true, repeat: 1, ease: 'power2.out', delay: t0 });
-      });
-      g.fromTo(el.linhas, { opacity: 1 }, { opacity: 0.55, duration: 0.8, yoyo: true, repeat: 5, ease: 'sine.inOut', delay: 0.8 * e });
-      // 3. A barra "Ganho" conta de 0x até Nx e dá um pulo no fim.
+      // 2. As 9 casas acendem juntas e pulsam devagar (bem menos de 3 vezes por segundo).
+      g.set(el.cheia, { opacity: 1 });
+      g.fromTo(el.casas, { opacity: 0 }, { opacity: 1, duration: 0.3 * e, ease: 'power2.out', delay: 0.25 * e });
+      if (!reduzido) g.fromTo(el.casas, { scale: 1 }, { scale: 1.06, duration: 0.4, yoyo: true, repeat: 5, ease: 'sine.inOut', delay: 0.8 * e });
+      // 3. A barra "Ganho" valida o acumulado (conta de x1 até o valor) ou desenha o x∞, e dá um pulo.
       const alvo = resultado.multiplicador;
-      const valor = { v: 0 };
-      el.valorGanho.textContent = formatarMultiplicador(0);
+      if (!isFinite(alvo)) { // x∞ (Curinga total): sem contagem, o número não existe
+        escreverMultiplicador(el.valorGanho, alvo);
+        validarGanho(reduzido, e, 0.4 * e);
+        return;
+      }
+      const valor = { v: 1 };
+      escreverMultiplicador(el.valorGanho, 1);
       contagem = g.to(valor, {
-        v: alvo, duration: Math.min(1.0, 0.3 + 0.04 * alvo) * e, delay: 0.15 * e, ease: 'power1.out',
+        v: alvo, duration: Math.min(1.0, 0.3 + 0.12 * Math.log10(Math.max(1, alvo))) * e, delay: 0.15 * e, ease: 'power1.out',
         onUpdate: function () {
           const n = Math.round(valor.v);
           const texto = formatarMultiplicador(n);
           if (el.valorGanho.textContent !== texto) el.valorGanho.textContent = texto;
         },
         onComplete: function () {
-          el.valorGanho.textContent = formatarMultiplicador(alvo);
+          escreverMultiplicador(el.valorGanho, alvo);
           contagem = null;
-          if (!reduzido) g.fromTo(el.barra, { scale: 1 }, { scale: 1.1, duration: 0.12 * e, yoyo: true, repeat: 1, ease: 'power2.out' });
+          validarGanho(reduzido, e, 0);
         },
       });
     }
@@ -4200,11 +5113,17 @@ window.CONFIG = {
       el.tabuleiro.classList.add('derrota');
       el.ko.textContent = cfg.textos.palavraDerrota;
       [el.morto, el.ko].forEach(function (c) { c.classList.add('ativa'); });
+      // Quebra com acumulado x2 ou mais: depois do K.O. a barra "Ganho" valida o acumulado (com x1 não há validação).
+      const valida = resultado.acumulado >= 2;
+      escreverMultiplicador(el.valorGanho, resultado.acumulado);
       if (!g) {
         el.morto.style.opacity = 0.5; el.ko.style.opacity = 1;
         el.celulas.forEach(function (c) { c.style.opacity = 0.4; });
+        if (valida) el.barra.classList.add('validada');
         return;
       }
+      // Logo depois da pancada do K.O.: o realce entra pela classe e a barra dá um pulo.
+      if (valida) g.delayedCall(0.7 * e, function () { validarGanho(reduzido, e, 0); });
       // 1. Os rolos desbotam: as células perdem opacidade e um véu de Papel creme aparece (só opacity, sem filtro).
       g.to(el.celulas, { opacity: 0.4, duration: 0.7 * e, ease: 'power1.out' });
       g.fromTo(el.morto, { opacity: 0 }, { opacity: 0.5, duration: 0.9 * e, delay: 0.15 * e, ease: 'power1.out' });
@@ -4235,10 +5154,12 @@ window.CONFIG = {
     // RESULTADO: região aria-live e entrada com destaque do tipo, multiplicador, título e mensagem.
     function resultado(res, cfg) {
       if (!el) return;
-      const tipo = res.tipo === 'ganhou' ? cfg.textos.tipoGanhou : cfg.textos.tipoPerdeu;
+      const tipo = tipoDaParada(res.parada, cfg.textos);
       const frase = function (t) { t = String(t).trim(); return /[.!?…]$/.test(t) ? t : t + '.'; };
-      el.anuncio.textContent = tipo + ' ' + frase(formatarMultiplicador(res.multiplicador)) + ' ' + frase(res.titulo) + ' ' + res.mensagem;
-      if (res.tipo === 'ganhou') el.valorGanho.textContent = formatarMultiplicador(res.multiplicador);
+      // O x∞ é um desenho: para o leitor de tela vira "x infinito".
+      const falado = res.multiplicador === Infinity ? 'x ' + cfg.textos.infinitoLeitor : formatarMultiplicador(res.multiplicador);
+      el.anuncio.textContent = frase(tipo) + ' ' + frase(falado) + ' ' + frase(res.titulo) + ' ' + res.mensagem;
+      if (res.parada !== 'quebra') escreverMultiplicador(el.valorGanho, res.multiplicador);
       const g = gs();
       if (!g) return;
       const reduzido = Festa.movimentoReduzido();
@@ -4260,6 +5181,7 @@ window.CONFIG = {
     // "Jogar de novo": para todas as animações da revelação, apaga a festa e esconde as camadas.
     function limpar() {
       iniciada = null;
+      Destaque.limpar();
       Festa.parar();
       Efeitos.limpar();
       if (!el) return;
@@ -4271,7 +5193,9 @@ window.CONFIG = {
         g.set(todas, { clearProps: 'transform,opacity' });
       }
       todas.forEach(function (p) { if (p && p.style) { p.style.removeProperty('opacity'); p.style.removeProperty('transform'); } });
-      [el.linhas, el.morto, el.ko].forEach(function (c) { c.classList.remove('ativa'); });
+      [el.cheia, el.morto, el.ko].forEach(function (c) { c.classList.remove('ativa'); });
+      el.casas.forEach(function (c) { c.classList.remove('acesa'); });
+      el.barra.classList.remove('validada');
       el.ko.textContent = '';
       el.tabuleiro.classList.remove('vitoria', 'derrota');
       el.anuncio.textContent = '';
@@ -4633,7 +5557,7 @@ window.CONFIG = {
       const g = gs();
       if (!el || !g) return;
       const ultimo = resultado.roteiro[resultado.roteiro.length - 1];
-      if (resultado.tipo === 'ganhou' && ultimo && ultimo.intensidade === 'jackpot') jackpot(resultado, cfg, e);
+      if (resultado.parada === 'suprema' && ultimo && ultimo.intensidade === 'jackpot') jackpot(resultado, cfg, e);
     }
 
     // Jackpot: aguada Lírio/Pêssego com raios de sol, o monograma LA (a Carta) em tela cheia e fogos. Começa no
@@ -4989,6 +5913,26 @@ window.CONFIG = {
       if (n >= 3) tom({ tipo: 'sine', f: 110, f2: 46, dur: 0.38 * e, vol: 0.22 });
     }
 
+    // Som da formação: um arpejo curto que cresce e sobe com o fator do giro (x2: 2 notas; x3 a x5: 3; x6 e x9: 4;
+    // fatores de giro duplo, 5). Formação de ícone especial ganha um brilho agudo no fim.
+    function formacao(passo, velocidade) {
+      if (!pronto()) return;
+      const e = 1 / (velocidade || 1);
+      const fator = Math.max(2, Number(passo.fator) || 2);
+      const bits = Math.log2(fator);
+      const notas = Math.min(5, 1 + Math.round(bits));
+      const base = semitons(659.25, Math.min(12, Math.round(bits * 2))); // mi 5 em diante
+      const ARPEJO = [0, 4, 7, 12, 16];
+      for (let k = 0; k < notas; k++) {
+        const t = (0.12 + k * 0.055) * e;
+        tom({ tipo: 'triangle', f: semitons(base, ARPEJO[k]), t: t, dur: 0.13 * e, vol: 0.11 });
+        tom({ tipo: 'square', f: semitons(base, ARPEJO[k]), t: t, dur: 0.07 * e, vol: 0.02, passaBaixa: 3200 });
+      }
+      if ((passo.formacoes || []).some(function (f) { return f.especial; })) {
+        tom({ tipo: 'sine', f: semitons(base, 24), t: (0.12 + notas * 0.055) * e, dur: 0.22 * e, vol: 0.07 });
+      }
+    }
+
     // Fanfarra: r = 0 (1ª etapa) … 1 (última). Mais notas no arpejo, acorde mais longo e mais vozes,
     // baixo, brilhos e (no jackpot) o "ta-ta-ta-taaam" de abertura.
     function fanfarra(r, jackpot, e) {
@@ -5042,8 +5986,8 @@ window.CONFIG = {
     function desfecho(resultado, cfg, escala) {
       const e = escala || 1;
       if (resultado.tipo === 'ganhou') {
-        const total = Math.max(1, (cfg && cfg.etapas ? cfg.etapas.length : 1) - 1);
-        const r = Math.min(1, Math.max(0, (resultado.etapa - 1) / total));
+        const total = Math.max(1, (cfg && cfg.giros ? cfg.giros.length : 1) - 1);
+        const r = resultado.parada === 'suprema' ? 1 : Math.min(1, Math.max(0, (resultado.giro - 1) / total));
         const passos = resultado.roteiro || [];
         const ultimo = passos[passos.length - 1];
         const jackpot = !!(ultimo && ultimo.intensidade === 'jackpot');
@@ -5076,7 +6020,7 @@ window.CONFIG = {
 
     return {
       preparar: seguro(preparar), tiquesDaEtapa: function (passo) { try { return tiquesDaEtapa(passo); } catch (e) { return []; } },
-      giro: seguro(giro), tique: seguro(tique), parada: seguro(parada), etapa: seguro(etapa), desfecho: seguro(desfecho),
+      giro: seguro(giro), tique: seguro(tique), parada: seguro(parada), etapa: seguro(etapa), formacao: seguro(formacao), desfecho: seguro(desfecho),
       parar: seguro(pararTudo), pausar: seguro(pausar), mudo: function () { return mudo; },
     };
   })();
@@ -5090,7 +6034,7 @@ window.CONFIG = {
         if (rodada !== app.rodada) return;
         Tela.mostrarPasso(passo, app.config);
         Som.parada(2, passo);
-        if (!passo.final) Som.etapa(passo, 1);
+        if (!passo.final) { Som.etapa(passo, 1); Som.formacao(passo, 1); }
         if (passo.final && aoDesfecho) aoDesfecho();
       }, inicio + passo.revelacaoMs);
       inicio += passo.duracaoMs;
@@ -5275,9 +6219,10 @@ window.CONFIG = {
       avisar('Não foi possível ler o CONFIG (' + (erro && erro.message) + '): usando valores seguros.');
       app.config = prepararConfig({});
     }
-    Motor.tabelaDeDesfechos(app.config); // confere as chances já na abertura (avisos só no console)
+    Motor.tabelaDeParadas(app.config); // confere as chances já na abertura (avisos só no console)
     const el = Tela.pegarElementos();
     Diretor.preparar(el.tabuleiro); // rolos (camada por cima das células), montados uma vez só
+    Destaque.preparar(el.tabuleiro); // casas acesas, traços, contornos e selos do fator (5.7.0)
     Revelacao.preparar(el.tabuleiro); // camadas da revelação final e a festa (5.7.1 e 5.7.2)
     Efeitos.preparar(); // efeitos por intensidade: aura, brilho da Logo, fogo, raios, jackpot (5.7.3)
     // "Reduzir movimento": a preferência do aparelho vira a classe .reduzir-movimento na raiz (o CSS e os
